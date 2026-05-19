@@ -3,8 +3,9 @@ import {
   Table, Button, Modal, TextInput, Stack, Title, Card,
   Group, ActionIcon, Select, Textarea, Badge, Grid, ComboboxItem,
   Avatar, Text, Divider, Loader, Pagination, Tooltip,
-  Box, Container, SimpleGrid, Paper, ThemeIcon,
-  ScrollArea, Center, Alert, Menu, Progress
+  Box, Container, Paper, 
+  ScrollArea, Center, Alert, Menu, 
+  Transition
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
@@ -12,13 +13,14 @@ import {
   IconGavel,
   IconRefresh, IconDownload, IconPrinter,
   IconFileExcel, IconFile, IconFileWord, IconInfoCircle,
-  IconCheck, IconX, IconAlertCircle, IconClock
-} from '@tabler/icons-react';
+  IconCheck, IconX} from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
 import { usePrint } from '../hooks/usePrint';
+import DossierStatsCards from './DossierStatsCards';
 
-interface Dossier {
+
+export interface Dossier {
   Grade: string;
   DossierID: number;
   PersonnelID: number;
@@ -39,7 +41,6 @@ interface Dossier {
   AgentPrenom?: string;
   AgentMatricule?: string;
 }
-
 interface Agent {
   PersonnelID: number;
   Nom: string;
@@ -372,10 +373,6 @@ export default function Dossiers() {
   );
 
 
-  const totalDossiers = dossiers.length;
-  const enCours = dossiers.filter(d => d.Etat === 'En cours').length;
-  const clotures = dossiers.filter(d => d.Etat === 'Clôturé').length;
-  const suspendus = dossiers.filter(d => d.Etat === 'Suspendu').length;
 
   const agentOptions = agents.map((a) => ({
     value: String(a.PersonnelID), // ✅ ce qui sera stocké
@@ -441,45 +438,13 @@ export default function Dossiers() {
             </Group>
           </Card>
 
-          {/* Cartes Statistiques */}
-          <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#e8f4fd' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Total Dossiers</Text>
-                <ThemeIcon size="lg" radius="md" color="blue" variant="light"><IconGavel size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="blue">{totalDossiers}</Text>
-              <Progress value={100} size="sm" radius="xl" color="blue" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>Dossiers enregistrés</Text>
-            </Paper>
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#e8f5e9' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>En cours</Text>
-                <ThemeIcon size="lg" radius="md" color="green" variant="light"><IconClock size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="green">{enCours}</Text>
-              <Progress value={totalDossiers > 0 ? (enCours / totalDossiers) * 100 : 0} size="sm" radius="xl" color="green" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>En traitement</Text>
-            </Paper>
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#fff3e0' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Suspendus</Text>
-                <ThemeIcon size="lg" radius="md" color="orange" variant="light"><IconAlertCircle size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="orange">{suspendus}</Text>
-              <Progress value={totalDossiers > 0 ? (suspendus / totalDossiers) * 100 : 0} size="sm" radius="xl" color="orange" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>En attente</Text>
-            </Paper>
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#f3e5f5' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Clôturés</Text>
-                <ThemeIcon size="lg" radius="md" color="violet" variant="light"><IconCheck size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="violet">{clotures}</Text>
-              <Progress value={totalDossiers > 0 ? (clotures / totalDossiers) * 100 : 0} size="sm" radius="xl" color="violet" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>Terminés</Text>
-            </Paper>
-          </SimpleGrid>
+          <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
+            {(styles) => (
+              <div style={styles}>
+                <DossierStatsCards dossiers={dossiers} />
+              </div>
+            )}
+          </Transition>
 
           {/* Barre d'actions */}
           <Card withBorder radius="lg" shadow="sm" p="md">

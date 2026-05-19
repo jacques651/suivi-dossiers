@@ -3,9 +3,10 @@ import {
   Table, Button, Modal, TextInput, Stack, Title, Card,
   Group, ActionIcon, Select, Textarea, Grid, Badge,
   Avatar, Text, Divider, Loader, Pagination, Tooltip,
-  Box, Container, SimpleGrid, Paper, ThemeIcon,
-  ScrollArea, Center, Alert, Menu, Progress,
-  Autocomplete
+  Box, Container, Paper, 
+  ScrollArea, Center, Alert, Menu, 
+  Autocomplete,
+  Transition
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
@@ -24,8 +25,6 @@ import {
   IconFileWord,
   IconInfoCircle,
   IconX,
-  IconClock,
-  IconAlertCircle,
   IconTrash
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -37,8 +36,9 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { usePrint } from '../hooks/usePrint';
+import RecommandationsStatCards from './RecommandationsStatCards';
 
-interface Recommandation {
+export interface Recommandation {
   RecommandationID: number;
   Services?: string;
   Source?: string;
@@ -465,11 +465,6 @@ export default function Recommandations() {
     activePage * itemsPerPage
   );
 
-  const totalRecommandations = recommandations.length;
-  const realisees = recommandations.filter(r => r.NiveauMiseEnOeuvre === 'Réalisée').length;
-  const enCours = recommandations.filter(r => r.NiveauMiseEnOeuvre === 'En cours').length;
-  const nonRealisees = recommandations.filter(r => r.NiveauMiseEnOeuvre === 'Non commencé' || r.NiveauMiseEnOeuvre === 'Abandonnée').length;
-  const tauxRealisation = getTauxRealisation();
 
   // Fonction pour charger les domaines distincts depuis la base
   const loadExistingDomaines = async () => {
@@ -540,46 +535,14 @@ export default function Recommandations() {
             </Group>
           </Card>
 
-          {/* Cartes Statistiques */}
-          <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#e8f4fd' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Total</Text>
-                <ThemeIcon size="lg" radius="md" color="blue" variant="light"><IconListCheck size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="blue">{totalRecommandations}</Text>
-              <Progress value={100} size="sm" radius="xl" color="blue" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>Recommandations</Text>
-            </Paper>
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#e8f5e9' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Réalisées</Text>
-                <ThemeIcon size="lg" radius="md" color="green" variant="light"><IconCheck size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="green">{realisees}</Text>
-              <Progress value={totalRecommandations > 0 ? (realisees / totalRecommandations) * 100 : 0} size="sm" radius="xl" color="green" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>Taux: {tauxRealisation.toFixed(1)}%</Text>
-            </Paper>
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#fff3e0' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>En cours</Text>
-                <ThemeIcon size="lg" radius="md" color="orange" variant="light"><IconClock size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="orange">{enCours}</Text>
-              <Progress value={totalRecommandations > 0 ? (enCours / totalRecommandations) * 100 : 0} size="sm" radius="xl" color="orange" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>En progression</Text>
-            </Paper>
-            <Paper p="md" radius="lg" withBorder style={{ backgroundColor: '#ffebee' }}>
-              <Group justify="space-between" mb="xs">
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Non réalisées</Text>
-                <ThemeIcon size="lg" radius="md" color="red" variant="light"><IconAlertCircle size={18} /></ThemeIcon>
-              </Group>
-              <Text fw={800} size="xl" c="red">{nonRealisees}</Text>
-              <Progress value={totalRecommandations > 0 ? (nonRealisees / totalRecommandations) * 100 : 0} size="sm" radius="xl" color="red" mt={8} />
-              <Text size="xs" c="dimmed" mt={4}>À traiter</Text>
-            </Paper>
-          </SimpleGrid>
-
+          {/* Cartes Statistiques - exactement comme AgentStatsCards */}
+          <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
+            {(styles) => (
+              <div style={styles}>
+                <RecommandationsStatCards recommandations={recommandations} />
+              </div>
+            )}
+          </Transition>
           {/* Barre d'actions - le reste du code reste identique */}
           <Card withBorder radius="lg" shadow="sm" p="md">
             <Group justify="space-between" align="flex-end" mb="md">

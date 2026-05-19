@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
   Tabs, Card, Group, Avatar, Text, Badge, Flex,
-  Button, Container, Stack, Box, Title, SimpleGrid,
-  Paper, ThemeIcon, Center, Loader
+  Button, Container, Stack, Box, Title, 
+  Center, Loader
 } from '@mantine/core';
 import {
   IconDatabase,
@@ -140,14 +140,6 @@ export default function Referentiels() {
     setLoading(false);
   };
 
-  const statsCards = [
-    { label: 'Grades', value: grades.length, icon: IconUserStar, color: 'blue', bg: '#e8f4fd' },
-    { label: 'Sanctions', value: sanctions.length, icon: IconGavel, color: 'red', bg: '#ffebee' },
-    { label: 'Signataires', value: signataires.filter(s => s.Statut === 1).length, icon: IconSignature, color: 'cyan', bg: '#e0f7fa' },
-    { label: 'Services', value: services.filter(s => s.Actif === 1).length, icon: IconBuildingCommunity, color: 'teal', bg: '#e0fcf5' },
-    { label: 'Paramètres', value: parametres.length, icon: IconSettings, color: 'green', bg: '#e8f5e9' },
-    { label: 'En-têtes', value: enteteDocuments.length, icon: IconHdr, color: 'violet', bg: '#f3e5f5' }  // ← MODIFIÉ
-  ];
 
   if (loading) {
     return (
@@ -186,21 +178,6 @@ export default function Referentiels() {
               </Group>
             </Flex>
           </Card>
-
-          {/* Stats Cards compactes */}
-          <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 6 }} spacing="xs">
-            {statsCards.map((stat) => (
-              <Paper key={stat.label} p="xs" radius="md" withBorder style={{ backgroundColor: stat.bg }}>
-                <Group justify="space-between" align="center">
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>{stat.label}</Text>
-                  <ThemeIcon size="md" radius="md" color={stat.color} variant="light">
-                    <stat.icon size={14} />
-                  </ThemeIcon>
-                </Group>
-                <Text fw={800} size="lg" c={stat.color} ta="center">{stat.value}</Text>
-              </Paper>
-            ))}
-          </SimpleGrid>
 
           {/* Tabs avec composants modulaires */}
           <Card withBorder radius="md" shadow="none" p={0}>

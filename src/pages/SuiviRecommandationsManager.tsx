@@ -4,13 +4,13 @@ import {
   Box, Container, Stack, Card, Title, Text, Group, Button, Modal,
   TextInput, Textarea, Select, Badge, ActionIcon, Tooltip, Divider,
   ScrollArea, Table, Pagination, Avatar, Center, LoadingOverlay,
-  Paper, Grid, SimpleGrid, ThemeIcon, Menu,
+  Paper, Grid, Menu,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconChecklist, IconEdit, IconEye, IconSearch, IconRefresh,
-  IconInfoCircle, IconDeviceFloppy, IconCheck, IconX, IconClock,
-  IconAlertCircle, IconDownload, IconFileExcel,
+  IconInfoCircle, IconDeviceFloppy, 
+  IconDownload, IconFileExcel,
   IconPrinter
   ,
 } from '@tabler/icons-react';
@@ -20,8 +20,9 @@ import * as XLSX from 'xlsx';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { usePrint } from '../hooks/usePrint';
+import SuiviRecommandationStatCards from './SuiviRecommandationStatCards';
 
-interface SuiviRecommandation {
+export interface SuiviRecommandation {
   SuiviID: number;
   RecommandationID: number;
   MesuresCorrectives?: string;
@@ -139,14 +140,6 @@ const SuiviRecommandationsManager: React.FC = () => {
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const stats = {
-    total: suivis.length,
-    realisees: suivis.filter(s => s.NiveauMiseEnOeuvre === 'Réalisée').length,
-    enCours: suivis.filter(s => s.NiveauMiseEnOeuvre === 'En cours').length,
-    enRetard: suivis.filter(s => s.NiveauMiseEnOeuvre === 'En retard').length,
-    bloquees: suivis.filter(s => s.NiveauMiseEnOeuvre === 'Bloquée').length,
-  };
-
   const exportExcel = async () => {
     setExporting(true);
     const data = filtered.map(s => ({
@@ -216,22 +209,8 @@ const SuiviRecommandationsManager: React.FC = () => {
             </Group>
           </Card>
 
-          {/* Stats */}
-          <SimpleGrid cols={{ base: 2, md: 5 }} spacing="md">
-            {[
-              { label: 'Total', value: stats.total, color: 'blue', icon: <IconChecklist size={18} /> },
-              { label: 'Réalisées', value: stats.realisees, color: 'green', icon: <IconCheck size={18} /> },
-              { label: 'En cours', value: stats.enCours, color: 'blue', icon: <IconClock size={18} /> },
-              { label: 'En retard', value: stats.enRetard, color: 'orange', icon: <IconAlertCircle size={18} /> },
-              { label: 'Bloquées', value: stats.bloquees, color: 'red', icon: <IconX size={18} /> },
-            ].map((s, i) => (
-              <Paper key={i} p="sm" radius="md" withBorder ta="center">
-                <ThemeIcon color={s.color} variant="light" size="md" radius="md" mx="auto" mb={4}>{s.icon}</ThemeIcon>
-                <Text fw={700} size="lg" c={s.color}>{s.value}</Text>
-                <Text size="xs" c="dimmed">{s.label}</Text>
-              </Paper>
-            ))}
-          </SimpleGrid>
+          {/* Cartes Statistiques - exactement comme AgentStatsCards */}
+          <SuiviRecommandationStatCards suivis={suivis} />
 
           {/* Barre */}
           <Card withBorder radius="lg" shadow="sm" p="md">

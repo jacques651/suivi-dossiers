@@ -11,8 +11,10 @@ import {
   IconListCheck, IconPlus, IconEye, IconCategory
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
+import DashboardStatCards from './DashboardStatCards';
 
-interface Stats {
+
+export interface Stats {
   totalAgents: number;
   totalRapports: number;
   totalRecommandations: number;
@@ -48,47 +50,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const tauxProgression = ((stats.recommandationsRealisees + stats.recommandationsEnCours) / totalRecommandations) * 100;
   const pourcentageAgentsAvecDossier = stats.totalAgents ? Math.round((stats.totalDossiers / stats.totalAgents) * 100) : 0;
 
-  const kpiItems = [
-    { label: 'Agents', value: stats.totalAgents, icon: IconUsers, color: 'blue', bg: '#e8f4fd', page: 'agents' },
-    { label: 'Rapports', value: stats.totalRapports, icon: IconFileText, color: 'green', bg: '#e8f5e9', page: 'rapports' },
-    { label: 'Recommandations', value: stats.totalRecommandations, icon: IconChecklist, color: 'orange', bg: '#fff3e0', page: 'recommandations' },
-    { label: 'Dossiers disciplinaires', value: stats.totalDossiers, icon: IconGavel, color: 'violet', bg: '#f3e5f5', page: 'dossiers' }
-  ];
-
- 
-
-  const renderCard = (item: any, isKpi = false) => (
-    <Paper
-      key={item.label}
-      p="md"
-      radius="lg"
-      withBorder
-      style={{ backgroundColor: item.bg, cursor: 'pointer', transition: 'all 0.2s' }}
-      onClick={() => onNavigate?.(item.page)}
-      onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
-      onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-    >
-      <Group justify="space-between" mb="xs">
-        <Text size="xs" c="dimmed" tt="uppercase" fw={600}>{item.label}</Text>
-        <ThemeIcon size="lg" radius="md" color={item.color} variant="light">
-          <item.icon size={isKpi ? 22 : 24} />
-        </ThemeIcon>
-      </Group>
-      <Text fw={800} size="xl" c={item.color}>{formatNumber(item.value)}</Text>
-      {isKpi && (
-        <>
-          <Progress value={100} size="sm" radius="xl" color={item.color} mt={8} />
-          <Text size="xs" c="dimmed" mt={4}>{item.description}</Text>
-        </>
-      )}
-      {!isKpi && (
-        <Stack gap={2} mt="xs">
-          <Text fw={600} size="md">{item.label}</Text>
-          <Text size="xs" c="dimmed">{item.desc}</Text>
-        </Stack>
-      )}
-    </Paper>
-  );
 
   if (loading) return (
     <Center style={{ height: '50vh' }}>
@@ -128,10 +89,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </Group>
           </Card>
 
-          {/* KPI */}
-          <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
-            {kpiItems.map(item => renderCard({ ...item, description: `${item.label.toLowerCase()} enregistrés` }, true))}
-          </SimpleGrid>
+          {/* Cartes Statistiques */}
+          <DashboardStatCards stats={stats} onNavigate={onNavigate} />
 
           {/* Taux de réalisation + Synthèse rapide */}
           <Grid>

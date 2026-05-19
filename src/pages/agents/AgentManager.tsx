@@ -1,7 +1,7 @@
 // src/pages/agents/AgentManager.tsx
 import { useEffect, useState, useRef } from 'react';
-import { Stack, Card, Title, Text, Group, Button, Avatar, Box, Container, Center, Loader } from '@mantine/core';
-import { IconUsers, IconPlus, IconRefresh } from '@tabler/icons-react';
+import { Stack, Card, Title, Text, Group, Button, Avatar, Box, Container, Center, Loader, ThemeIcon, Badge, Transition, Paper } from '@mantine/core';
+import { IconUsers, IconPlus, IconRefresh, IconUserCheck, IconBuildingCommunity, IconTrendingUp } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
 import AgentDeleteModal from './AgentDeleteModal';
@@ -12,7 +12,6 @@ import AgentImportModal from './AgentImportModal';
 import AgentStatsCards from './AgentStatsCards';
 import AgentTable from './AgentTable';
 import AgentViewModal from './AgentViewModal';
-
 
 // Définition et export des interfaces
 export interface Agent {
@@ -41,6 +40,7 @@ export default function AgentManager() {
   const [loading, setLoading] = useState(true);
   const [serviceOptions, setServiceOptions] = useState<string[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
+  const [] = useState(false);
 
   // États modals
   const [formModalOpen, setFormModalOpen] = useState(false);
@@ -57,9 +57,9 @@ export default function AgentManager() {
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [selectedEntite, setSelectedEntite] = useState<string | null>(null);
 
-  useEffect(() => { 
-    loadAgents(); 
-    loadGrades(); 
+  useEffect(() => {
+    loadAgents();
+    loadGrades();
   }, []);
 
   const loadAgents = async () => {
@@ -70,60 +70,61 @@ export default function AgentManager() {
       setAgents(data);
       const services = [...new Set(data.map(a => a.Service).filter(Boolean))] as string[];
       setServiceOptions(services);
+      // Plus aucune notification de succès
     } catch (error) {
-      notifications.show({ 
-        title: 'Erreur', 
-        message: 'Impossible de charger les agents', 
-        color: 'red' 
+      notifications.show({
+        title: 'Erreur',
+        message: 'Impossible de charger les agents',
+        color: 'red'
       });
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadGrades = async () => {
-    try { 
+    try {
       const result = await invoke('get_grades');
-      setGrades(result as Grade[]); 
+      setGrades(result as Grade[]);
     } catch (error) {
       console.error('Erreur chargement grades:', error);
     }
   };
 
   // Handlers pour les actions
-  const handleAdd = () => { 
-    setEditingId(null); 
+  const handleAdd = () => {
+    setEditingId(null);
     setSelectedAgent(null);
-    setFormModalOpen(true); 
-  };
-  
-  const handleEdit = (agent: Agent) => { 
-    setEditingId(agent.PersonnelID); 
-    setSelectedAgent(agent); 
-    setFormModalOpen(true); 
-  };
-  
-  const handleView = (agent: Agent) => { 
-    setSelectedAgent(agent); 
-    setViewModalOpen(true); 
-  };
-  
-  const handleDelete = (id: number) => { 
-    setAgentToDelete(id); 
-    setDeleteModalOpen(true); 
+    setFormModalOpen(true);
   };
 
-  const handleSaved = () => { 
-    setFormModalOpen(false); 
-    setSelectedAgent(null); 
-    setEditingId(null); 
-    loadAgents(); 
+  const handleEdit = (agent: Agent) => {
+    setEditingId(agent.PersonnelID);
+    setSelectedAgent(agent);
+    setFormModalOpen(true);
   };
-  
-  const handleDeleted = () => { 
-    setDeleteModalOpen(false); 
-    setAgentToDelete(null); 
-    loadAgents(); 
+
+  const handleView = (agent: Agent) => {
+    setSelectedAgent(agent);
+    setViewModalOpen(true);
+  };
+
+  const handleDelete = (id: number) => {
+    setAgentToDelete(id);
+    setDeleteModalOpen(true);
+  };
+
+  const handleSaved = () => {
+    setFormModalOpen(false);
+    setSelectedAgent(null);
+    setEditingId(null);
+    loadAgents();
+  };
+
+  const handleDeleted = () => {
+    setDeleteModalOpen(false);
+    setAgentToDelete(null);
+    loadAgents();
   };
 
   const handleImported = () => {
@@ -134,7 +135,7 @@ export default function AgentManager() {
   // Filtrer les agents
   const filteredAgents = agents.filter(agent => {
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = 
+    const matchesSearch =
       agent.Nom?.toLowerCase().includes(searchLower) ||
       agent.Prenom?.toLowerCase().includes(searchLower) ||
       agent.Matricule?.toLowerCase().includes(searchLower);
@@ -146,80 +147,187 @@ export default function AgentManager() {
 
   if (loading) {
     return (
-      <Center style={{ height: '50vh' }}>
-        <Loader size="xl" color="#1b365d" />
+      <Center style={{ height: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <Paper p="xl" radius="xl" withBorder style={{ backgroundColor: 'rgba(255,255,255,0.95)' }}>
+          <Stack align="center" gap="md">
+            <Loader size="xl" variant="dots" color="#667eea" />
+            <Text size="lg" fw={500} variant="gradient" gradient={{ from: '#667eea', to: '#764ba2' }}>
+              Chargement des agents...
+            </Text>
+          </Stack>
+        </Paper>
       </Center>
     );
   }
 
   return (
-    <Box p="md">
-      <Container size="full">
-        <Stack gap="lg">
-          {/* En-tête */}
-          <Card withBorder radius="lg" p="lg" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)' }}>
-            <Group justify="space-between">
-              <Group gap="md">
-                <Avatar size={50} radius="md" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                  <IconUsers size={24} color="white" />
-                </Avatar>
-                <Box>
-                  <Title order={2} c="white">Gestion des Agents</Title>
-                  <Text c="gray.3" size="sm">Gérez les informations des agents</Text>
-                </Box>
-              </Group>
-              <Group>
-                <Button 
-                  variant="white" 
-                  color="dark" 
-                  leftSection={<IconRefresh size={16} />} 
-                  onClick={loadAgents}
-                >
-                  Actualiser
-                </Button>
-                <AgentExportMenu 
-                  agents={filteredAgents} 
-                  grades={grades} 
-                  onImport={() => setImportModalOpen(true)}
+    <Box style={{ background: '#f8f9fa', minHeight: '100vh' }} p="md">
+      <Container size="full" fluid>
+        <Stack gap="xl">
+          {/* En-tête avec design amélioré */}
+          <Transition mounted={true} transition="fade" duration={600}>
+            {(styles) => (
+              <Card
+                withBorder
+                radius="xl"
+                p="xl"
+                style={{
+                  ...styles,
+                  background: 'linear-gradient(135deg, #1b365d 0%, #295080 100%)',
+                  boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'
+                }}
+              >
+                <Group justify="space-between" align="center">
+                  <Group gap="lg">
+                    <Avatar
+                      size={60}
+                      radius="xl"
+                      style={{
+                        background: 'linear-gradient(135deg, #1b365d 0%, #295080 100%)'
+                      }}
+                    >
+                      <IconUsers size={28} color="black" />
+                    </Avatar>
+                    <Box>
+                      <Title order={1} c="white" fw={800} size="h2">
+                        Gestion des Agents
+                      </Title>
+                      <Group gap="xs" mt={5}>
+                        <Badge size="lg" variant="black" color="transparent" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                          <Group gap="xs">
+                            <IconUserCheck size={14} />
+                            <Text size="sm">{agents.length} agents</Text>
+                          </Group>
+                        </Badge>
+                        <Badge size="lg" variant="black" color="transparent" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                          <Group gap="xs">
+                            <IconBuildingCommunity size={14} />
+                            <Text size="sm">{serviceOptions.length} services</Text>
+                          </Group>
+                        </Badge>
+                      </Group>
+                    </Box>
+                  </Group>
+
+                  <Group gap="md">
+                    <Button
+                      variant="light"
+                      color="white"
+                      leftSection={<IconRefresh size={18} />}
+                      onClick={loadAgents}
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.2)',
+                        backdropFilter: 'blur(10px)',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                      }}
+                    >
+                      Actualiser
+                    </Button>
+
+                    <AgentExportMenu
+                      agents={filteredAgents}
+                      grades={grades}
+                      onImport={() => setImportModalOpen(true)}
+                    />
+
+                    <Button
+                      variant="white"
+                      color="dark"
+                      leftSection={<IconPlus size={18} />}
+                      onClick={handleAdd}
+                      style={{
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      Nouvel Agent
+                    </Button>
+                  </Group>
+                </Group>
+              </Card>
+            )}
+          </Transition>
+
+          {/* Statistiques avec design amélioré */}
+          <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
+            {(styles) => (
+              <div style={styles}>
+                <AgentStatsCards agents={agents} />
+              </div>
+            )}
+          </Transition>
+
+          {/* Filtres améliorés */}
+          <Transition mounted={true} transition="slide-down" duration={550} timingFunction="ease">
+            {(styles) => (
+              <div style={styles}>
+                <AgentFilters
+                  searchTerm={searchTerm}
+                  onSearchChange={setSearchTerm}
+                  selectedSexe={selectedSexe}
+                  onSexeChange={setSelectedSexe}
+                  selectedService={selectedService}
+                  onServiceChange={setSelectedService}
+                  selectedEntite={selectedEntite}
+                  onEntiteChange={setSelectedEntite}
+                  serviceOptions={serviceOptions}
                 />
-                <Button 
-                  variant="white" 
-                  color="dark" 
-                  leftSection={<IconPlus size={16} />} 
-                  onClick={handleAdd}
-                >
-                  Nouvel Agent
-                </Button>
-              </Group>
-            </Group>
-          </Card>
+              </div>
+            )}
+          </Transition>
 
-          {/* Statistiques */}
-          <AgentStatsCards agents={agents} />
+          {/* Résumé des filtres */}
+          {(searchTerm || selectedSexe || selectedService || selectedEntite) && (
+            <Transition mounted={true} transition="fade" duration={400}>
+              {(styles) => (
+                <Card withBorder radius="md" p="sm" style={styles}>
+                  <Group justify="space-between">
+                    <Group gap="xs">
+                      <ThemeIcon size="sm" variant="light" color="blue">
+                        <IconTrendingUp size={12} />
+                      </ThemeIcon>
+                      <Text size="sm" fw={500}>
+                        {filteredAgents.length} agent{filteredAgents.length !== 1 ? 's' : ''} trouvé{filteredAgents.length !== 1 ? 's' : ''}
+                      </Text>
+                    </Group>
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      onClick={() => {
+                        setSearchTerm('');
+                        setSelectedSexe(null);
+                        setSelectedService(null);
+                        setSelectedEntite(null);
+                      }}
+                    >
+                      Effacer tous les filtres
+                    </Button>
+                  </Group>
+                </Card>
+              )}
+            </Transition>
+          )}
 
-          {/* Filtres */}
-          <AgentFilters
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            selectedSexe={selectedSexe}
-            onSexeChange={setSelectedSexe}
-            selectedService={selectedService}
-            onServiceChange={setSelectedService}
-            selectedEntite={selectedEntite}
-            onEntiteChange={setSelectedEntite}
-            serviceOptions={serviceOptions}
-          />
-
-          {/* Tableau */}
-          <div ref={printRef}>
-            <AgentTable
-              agents={filteredAgents}
-              grades={grades}
-              onView={handleView}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-          </div>
+          {/* Tableau avec design amélioré */}
+          <Transition mounted={true} transition="fade" duration={600} timingFunction="ease">
+            {(styles) => (
+              <div ref={printRef} style={styles}>
+                <AgentTable
+                  agents={filteredAgents}
+                  grades={grades}
+                  onView={handleView}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              </div>
+            )}
+          </Transition>
         </Stack>
       </Container>
 
@@ -233,25 +341,25 @@ export default function AgentManager() {
         serviceOptions={serviceOptions}
         onSaved={handleSaved}
       />
-      
-      <AgentViewModal 
-        opened={viewModalOpen} 
-        onClose={() => setViewModalOpen(false)} 
-        agent={selectedAgent} 
-        grades={grades} 
+
+      <AgentViewModal
+        opened={viewModalOpen}
+        onClose={() => setViewModalOpen(false)}
+        agent={selectedAgent}
+        grades={grades}
       />
-      
-      <AgentDeleteModal 
-        opened={deleteModalOpen} 
-        onClose={() => setDeleteModalOpen(false)} 
-        agentId={agentToDelete} 
-        onDeleted={handleDeleted} 
+
+      <AgentDeleteModal
+        opened={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        agentId={agentToDelete}
+        onDeleted={handleDeleted}
       />
-      
-      <AgentImportModal 
-        opened={importModalOpen} 
-        onClose={() => setImportModalOpen(false)} 
-        onImported={handleImported} 
+
+      <AgentImportModal
+        opened={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImported={handleImported}
       />
     </Box>
   );
