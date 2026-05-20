@@ -19,7 +19,6 @@ import { notifications } from '@mantine/notifications';
 import { usePrint } from '../hooks/usePrint';
 import DossierStatsCards from './DossierStatsCards';
 
-
 export interface Dossier {
   Grade: string;
   DossierID: number;
@@ -41,6 +40,7 @@ export interface Dossier {
   AgentPrenom?: string;
   AgentMatricule?: string;
 }
+
 interface Agent {
   PersonnelID: number;
   Nom: string;
@@ -87,6 +87,7 @@ export default function Dossiers() {
     'Insoumission',
     'Violation des consignes'
   ]);
+  
   const { printDocument } = usePrint();
   const suiteReserveeOptions = ['Sanctionné(e)', 'Acquitté(e)', 'Classé sans suite', 'En instance'];
   const typeSanctionOptions = ['Sanction administrative', 'Sanction judiciaire', 'Sanction disciplinaire', 'Aucune'];
@@ -128,10 +129,8 @@ export default function Dossiers() {
     },
   });
 
-  // Ajoute cet état avec les autres
   const [rapports, setRapports] = useState<any[]>([]);
 
-  // Ajoute cette fonction de chargement
   const loadRapports = async () => {
     try {
       const result = await invoke('get_rapports_list');
@@ -141,21 +140,12 @@ export default function Dossiers() {
     }
   };
 
-  // Dans le useEffect, ajoute :
   useEffect(() => {
     loadDossiers();
     loadAgents();
     loadServices();
     loadTypeInconduiteOptions();
-    loadRapports(); // ← Ajoute cette ligne
-  }, []);
-
-  // Chargement initial
-  useEffect(() => {
-    loadDossiers();
-    loadAgents();
-    loadServices();
-    loadTypeInconduiteOptions();
+    loadRapports();
   }, []);
 
   useEffect(() => {
@@ -184,7 +174,6 @@ export default function Dossiers() {
     }
   };
 
-
   const loadServices = async () => {
     try {
       const result = await invoke('get_services_investigation');
@@ -199,11 +188,41 @@ export default function Dossiers() {
       const result = await invoke('get_dossiers');
       const dossiersData = result as Dossier[];
       const uniqueTypes = [...new Set(dossiersData.map(d => d.TypeInconduite).filter(Boolean))] as string[];
-      if (uniqueTypes.length > 0) {
-        setTypeInconduiteOptions(prev => [...new Set([...prev, ...uniqueTypes])]);
-      }
+      
+      const defaultTypes = [
+        'Faute professionnelle',
+        'Abus de pouvoir',
+        'Corruption',
+        'Négligence',
+        'Absence injustifiée',
+        'Insoumission',
+        'Violation des consignes'
+      ];
+      
+      const allTypes = [...new Set([...defaultTypes, ...uniqueTypes])];
+      setTypeInconduiteOptions(allTypes);
     } catch (error) {
       console.error('Erreur chargement types inconduite:', error);
+    }
+  };
+
+  // Fonction pour ajouter un nouveau type d'inconduite
+  const addNewTypeInconduite = (newType: string) => {
+    if (newType && newType.trim() !== '') {
+      const typeExists = typeInconduiteOptions.some(
+        option => option.toLowerCase() === newType.toLowerCase()
+      );
+      
+      if (!typeExists) {
+        setTypeInconduiteOptions(prev => [...prev, newType]);
+        form.setFieldValue('TypeInconduite', newType);
+        notifications.show({
+          title: 'Nouveau type ajouté',
+          message: `"${newType}" a été ajouté aux options`,
+          color: 'green',
+          icon: <IconCheck size={16} />
+        });
+      }
     }
   };
 
@@ -214,9 +233,20 @@ export default function Dossiers() {
         throw new Error("Veuillez sélectionner un agent");
       }
 
+      // 🔥 Ajouter le nouveau type d'inconduite s'il n'existe pas
+      if (values.TypeInconduite && values.TypeInconduite.trim() !== '') {
+        const typeExists = typeInconduiteOptions.some(
+          option => option.toLowerCase() === values.TypeInconduite.toLowerCase()
+        );
+        
+        if (!typeExists) {
+          setTypeInconduiteOptions(prev => [...prev, values.TypeInconduite]);
+        }
+      }
+
       const dossierData = {
         ...values,
-        PersonnelID: Number(values.PersonnelID), // 🔥 sécurisé
+        PersonnelID: Number(values.PersonnelID),
         Annee: values.Annee ? Number(values.Annee) : null,
         DossierID: editingId,
       };
@@ -225,7 +255,7 @@ export default function Dossiers() {
         await invoke('update_dossier', { dossier: dossierData });
         notifications.show({
           title: 'Succès',
-          message: 'Dossier modifié',
+          message: 'Dossier modifié avec succès',
           color: 'green',
           icon: <IconCheck size={16} />
         });
@@ -233,7 +263,7 @@ export default function Dossiers() {
         await invoke('create_dossier', { dossier: dossierData });
         notifications.show({
           title: 'Succès',
-          message: 'Dossier créé',
+          message: 'Dossier créé avec succès',
           color: 'green',
           icon: <IconCheck size={16} />
         });
@@ -260,12 +290,12 @@ export default function Dossiers() {
     if (!dossierToDelete) return;
     try {
       await invoke('delete_dossier', { id: dossierToDelete });
-      notifications.show({ title: 'Succès', message: 'Dossier supprimé', color: 'green', icon: <IconCheck size={16} /> });
+      notifications.show({ title: 'Succès', message: 'Dossier supprimé avec succès', color: 'green', icon: <IconCheck size={16} /> });
       setDeleteModalOpen(false);
       setDossierToDelete(null);
       loadDossiers();
     } catch (error) {
-      notifications.show({ title: 'Erreur', message: 'Impossible de supprimer', color: 'red', icon: <IconX size={16} /> });
+      notifications.show({ title: 'Erreur', message: 'Impossible de supprimer le dossier', color: 'red', icon: <IconX size={16} /> });
     }
   };
 
@@ -313,7 +343,6 @@ export default function Dossiers() {
   };
 
   const handlePrint = (orientation: 'portrait' | 'landscape') => {
-
     const rows = filteredDossiers.map((d, i) => `
     <tr>
       <td>${i + 1}</td>
@@ -347,6 +376,7 @@ export default function Dossiers() {
 
     printDocument(content, 'LISTE DES DOSSIERS', orientation);
   };
+  
   // Filtrage et pagination
   const filteredDossiers = dossiers.filter(dossier => {
     const matchesSearch = `${dossier.AgentNom} ${dossier.AgentPrenom} ${dossier.AgentMatricule}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -372,11 +402,9 @@ export default function Dossiers() {
     ).values()
   );
 
-
-
   const agentOptions = agents.map((a) => ({
-    value: String(a.PersonnelID), // ✅ ce qui sera stocké
-    label: `${a.Matricule} - ${a.Nom} ${a.Prenom}`, // ✅ ce qui est affiché
+    value: String(a.PersonnelID),
+    label: `${a.Matricule} - ${a.Nom} ${a.Prenom}`,
   }));
 
   const moisOptions = [
@@ -396,7 +424,7 @@ export default function Dossiers() {
 
   const serviceOptions: ComboboxItem[] = services.map(service => ({
     value: service.LibelleService,
-    label: service.LibelleService  // Simplement le libellé, sans acronyme
+    label: service.LibelleService
   }));
 
   if (loading) {
@@ -478,12 +506,10 @@ export default function Dossiers() {
                       </ActionIcon>
                     </Tooltip>
                   </Menu.Target>
-
                   <Menu.Dropdown>
                     <Menu.Item onClick={() => handlePrint('portrait')}>
                       🧾 Portrait
                     </Menu.Item>
-
                     <Menu.Item onClick={() => handlePrint('landscape')}>
                       📄 Paysage
                     </Menu.Item>
@@ -527,7 +553,6 @@ export default function Dossiers() {
               <Table
                 striped
                 highlightOnHover
-
                 style={{ fontSize: '11px', minWidth: '1000px' }}
               >
                 <Table.Thead style={{ backgroundColor: '#1b365d' }}>
@@ -681,8 +706,7 @@ export default function Dossiers() {
         </Stack>
       </Container>
 
-      {/* Modal Formulaire - Version améliorée */}
-
+      {/* Modal Formulaire - Version avec ajout de type d'inconduite par bouton */}
       <Modal
         opened={modalOpen}
         onClose={() => {
@@ -704,7 +728,6 @@ export default function Dossiers() {
       >
         <form onSubmit={form.onSubmit(handleSubmit)}>
           <Stack gap="md">
-
             {/* ================= AGENT ================= */}
             <Card withBorder radius="md" p="sm">
               <Select
@@ -723,20 +746,35 @@ export default function Dossiers() {
 
             {/* ================= INCONDUITE ================= */}
             <Card withBorder radius="md" p="sm">
-
               <Stack gap="xs">
-                {/* TYPE SEUL */}
-                <Select
-                  label="Type d'inconduite"
-                  placeholder="Sélectionner ou saisir"
-                  data={uniqueTypes}
-                  searchable
-                  clearable
-                  size="sm"
-                  value={form.values.TypeInconduite}
-                  onChange={(val) => form.setFieldValue('TypeInconduite', val || '')}
-                  onSearchChange={(q) => form.setFieldValue('TypeInconduite', q)}
-                />
+                {/* Type d'inconduite avec bouton d'ajout */}
+                <Group align="flex-end" gap="xs">
+                  <div style={{ flex: 1 }}>
+                    <Select
+                      label="Type d'inconduite"
+                      placeholder="Sélectionner un type"
+                      data={uniqueTypes}
+                      searchable
+                      clearable
+                      size="sm"
+                      value={form.values.TypeInconduite}
+                      onChange={(val) => form.setFieldValue('TypeInconduite', val || '')}
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="light"
+                    color="green"
+                    onClick={() => {
+                      const newType = prompt("Entrez le nouveau type d'inconduite:");
+                      if (newType && newType.trim()) {
+                        addNewTypeInconduite(newType.trim());
+                      }
+                    }}
+                  >
+                    <IconPlus size={16} />
+                  </Button>
+                </Group>
 
                 {/* ANNÉE + MOIS */}
                 <Grid>
@@ -749,7 +787,6 @@ export default function Dossiers() {
                       size="sm"
                     />
                   </Grid.Col>
-
                   <Grid.Col span={8}>
                     <Select
                       label="Mois"
@@ -770,8 +807,6 @@ export default function Dossiers() {
 
             {/* ================= SUIVI ================= */}
             <Card withBorder radius="md" p="sm">
-
-              {/* SERVICE SEUL */}
               <Select
                 label="Service d'investigation"
                 placeholder="Sélectionner"
@@ -781,6 +816,7 @@ export default function Dossiers() {
                 clearable
                 size="sm"
               />
+              
               <Select
                 label="Rapport lié"
                 placeholder="Sélectionner un rapport (optionnel)"
@@ -828,7 +864,6 @@ export default function Dossiers() {
             {/* ================= SANCTION ================= */}
             {!isEtatEnCours && (
               <Card withBorder radius="md" p="sm">
-
                 <Grid>
                   <Grid.Col span={6}>
                     <Select
@@ -902,11 +937,9 @@ export default function Dossiers() {
                 {editingId ? 'Modifier' : 'Créer'}
               </Button>
             </Group>
-
           </Stack>
         </form>
       </Modal>
-
 
       {/* Modal Confirmation Suppression */}
       <Modal
@@ -955,7 +988,7 @@ export default function Dossiers() {
             <Text fw={600} size="sm" mb="md">📌 Fonctionnalités :</Text>
             <Stack gap="xs">
               <Text size="sm">1️⃣ Sélectionnez l'agent concerné par le dossier disciplinaire</Text>
-              <Text size="sm">2️⃣ Renseignez le type d'inconduite (liste dynamique avec ajout possible)</Text>
+              <Text size="sm">2️⃣ Renseignez le type d'inconduite (liste dynamique avec ajout possible via le bouton "+")</Text>
               <Text size="sm">3️⃣ Choisissez le service d'investigation dans la liste déroulante</Text>
               <Text size="sm">4️⃣ Pour ajouter une sanction, le dossier doit être à l'état "Clôturé" ou "Suspendu"</Text>
               <Text size="sm">5️⃣ La suite réservée et les sanctions ne sont modifiables qu'après clôture</Text>
@@ -967,7 +1000,7 @@ export default function Dossiers() {
         </Stack>
       </Modal>
 
-      {/* Modal Voir Détails - Version compacte */}
+      {/* Modal Voir Détails */}
       <Modal
         opened={viewModalOpen}
         onClose={() => { setViewModalOpen(false); setSelectedDossier(null); }}
@@ -1116,8 +1149,6 @@ export default function Dossiers() {
           </Stack>
         )}
       </Modal>
-
-
     </Box>
   );
 }

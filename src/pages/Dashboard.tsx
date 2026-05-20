@@ -12,6 +12,7 @@ import {
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import DashboardStatCards from './DashboardStatCards';
+import { notifications } from '@mantine/notifications';
 
 
 export interface Stats {
@@ -38,12 +39,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    invoke('get_statistiques')
-      .then((data) => setStats(data as Stats))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+ useEffect(() => {
+  const loadStats = async () => {
+    try {
+      setLoading(true);
+      const data = await invoke<Stats>('get_statistiques');
+      console.log('Stats chargées:', data); // Pour déboguer
+      setStats(data);
+    } catch (error) {
+      console.error('Erreur chargement stats:', error);
+      notifications.show({
+        title: 'Erreur',
+        message: 'Impossible de charger les statistiques',
+        color: 'red',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  loadStats();
+}, []);
 
   const totalRecommandations = stats.totalRecommandations || 1;
   const tauxRealisation = (stats.recommandationsRealisees / totalRecommandations) * 100;

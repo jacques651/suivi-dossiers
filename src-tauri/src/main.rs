@@ -9,7 +9,6 @@ use tauri::generate_context;
 struct AppState {
     db: Mutex<Connection>,
 }
-
 fn init_db() -> Result<Connection> {
     // Utiliser le dossier AppData pour stocker la base de données
     let db_path = if cfg!(debug_assertions) {
@@ -218,6 +217,49 @@ fn init_db() -> Result<Connection> {
             DateLog DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         
+        -- ==================== TABLES D'AUTHENTIFICATION ====================
+        
+        CREATE TABLE IF NOT EXISTS Utilisateur (
+            UtilisateurID INTEGER PRIMARY KEY AUTOINCREMENT,
+            NomUtilisateur TEXT UNIQUE NOT NULL,
+            Email TEXT UNIQUE NOT NULL,
+            MotDePasse TEXT NOT NULL,
+            Nom TEXT,
+            Prenom TEXT,
+            Role TEXT DEFAULT 'user',
+            Statut INTEGER DEFAULT 1,
+            TentativesConnexion INTEGER DEFAULT 0,
+            DerniereConnexion DATETIME,
+            DateCreation DATETIME DEFAULT CURRENT_TIMESTAMP,
+            DateModification DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS Session (
+            SessionID INTEGER PRIMARY KEY AUTOINCREMENT,
+            Token TEXT UNIQUE NOT NULL,
+            UtilisateurID INTEGER NOT NULL,
+            DateCreation DATETIME DEFAULT CURRENT_TIMESTAMP,
+            DateExpiration DATETIME,
+            AdresseIP TEXT,
+            Actif INTEGER DEFAULT 1,
+            FOREIGN KEY (UtilisateurID) REFERENCES Utilisateur(UtilisateurID) ON DELETE CASCADE
+        );
+        
+        CREATE TABLE IF NOT EXISTS Permission (
+            PermissionID INTEGER PRIMARY KEY AUTOINCREMENT,
+            Code TEXT UNIQUE NOT NULL,
+            Libelle TEXT NOT NULL
+        );
+        
+        CREATE TABLE IF NOT EXISTS RolePermission (
+            RolePermissionID INTEGER PRIMARY KEY AUTOINCREMENT,
+            Role TEXT NOT NULL,
+            PermissionID INTEGER NOT NULL,
+            FOREIGN KEY (PermissionID) REFERENCES Permission(PermissionID) ON DELETE CASCADE,
+            UNIQUE(Role, PermissionID)
+        );
+        
+        -- INDEX
         CREATE INDEX IF NOT EXISTS idx_dossier_personnel ON Dossier(PersonnelID);
         CREATE INDEX IF NOT EXISTS idx_recommandation_rapport ON Recommandation(RapportID);
         CREATE INDEX IF NOT EXISTS idx_entete_document ON EnteteDocument(TypeDocument, Actif);
@@ -228,6 +270,10 @@ fn init_db() -> Result<Connection> {
         CREATE INDEX IF NOT EXISTS idx_logs_date ON Logs(DateLog);
         CREATE INDEX IF NOT EXISTS idx_logs_action ON Logs(Action);
         CREATE INDEX IF NOT EXISTS idx_logs_table ON Logs(TableConcernee);
+        CREATE INDEX IF NOT EXISTS idx_session_token ON Session(Token);
+        CREATE INDEX IF NOT EXISTS idx_session_utilisateur ON Session(UtilisateurID);
+        CREATE INDEX IF NOT EXISTS idx_utilisateur_email ON Utilisateur(Email);
+        CREATE INDEX IF NOT EXISTS idx_utilisateur_nom ON Utilisateur(NomUtilisateur);
         "
     )?;
 
@@ -531,6 +577,105 @@ fn init_db() -> Result<Connection> {
 
     println!("✅ Signataires insérés: {}", signataires.len());
 
+    // ==================== INSERTION DES PERMISSIONS ====================
+    let permissions = vec![
+        ("agents.view", "Voir les agents"),
+        ("agents.create", "Créer des agents"),
+        ("agents.edit", "Modifier des agents"),
+        ("agents.delete", "Supprimer des agents"),
+        ("rapports.view", "Voir les rapports"),
+        ("rapports.create", "Créer des rapports"),
+        ("rapports.edit", "Modifier des rapports"),
+        ("rapports.delete", "Supprimer des rapports"),
+        ("dossiers.view", "Voir les dossiers"),
+        ("dossiers.create", "Créer des dossiers"),
+        ("dossiers.edit", "Modifier des dossiers"),
+        ("dossiers.delete", "Supprimer des dossiers"),
+        ("recommandations.view", "Voir les recommandations"),
+        ("recommandations.create", "Créer des recommandations"),
+        ("recommandations.edit", "Modifier des recommandations"),
+        ("recommandations.delete", "Supprimer des recommandations"),
+        ("recommandations.suivi", "Suivre les recommandations"),
+        ("admin.users", "Gérer les utilisateurs"),
+        ("admin.roles", "Gérer les rôles"),
+        ("admin.permissions", "Gérer les permissions"),
+        ("parametres.view", "Voir les paramètres"),
+        ("parametres.edit", "Modifier les paramètres"),
+        ("logs.view", "Voir les logs"),
+    ];
+
+    for (code, libelle) in &permissions {
+        conn.execute(
+            "INSERT OR IGNORE INTO Permission (Code, Libelle) VALUES (?1, ?2)",
+            params![code, libelle],
+        )
+        .ok();
+    }
+    println!("✅ Permissions insérées: {}", permissions.len());
+
+    // ==================== INSERTION DES RÔLES ET PERMISSIONS ====================
+    // Rôle admin avec toutes les permissions
+    let admin_permissions: Vec<String> = permissions
+        .iter()
+        .map(|(code, _)| code.to_string())
+        .collect();
+    for perm_code in admin_permissions {
+        let perm_id: i64 = conn
+            .query_row(
+                "SELECT PermissionID FROM Permission WHERE Code = ?1",
+                [&perm_code],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if perm_id > 0 {
+            conn.execute(
+                "INSERT OR IGNORE INTO RolePermission (Role, PermissionID) VALUES ('admin', ?1)",
+                [perm_id],
+            )
+            .ok();
+        }
+    }
+
+    // Rôle user avec permissions de base
+    let user_permissions = vec![
+        "agents.view",
+        "rapports.view",
+        "dossiers.view",
+        "recommandations.view",
+        "recommandations.suivi",
+    ];
+    for perm_code in user_permissions {
+        let perm_id: i64 = conn
+            .query_row(
+                "SELECT PermissionID FROM Permission WHERE Code = ?1",
+                [perm_code],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if perm_id > 0 {
+            conn.execute(
+                "INSERT OR IGNORE INTO RolePermission (Role, PermissionID) VALUES ('user', ?1)",
+                [perm_id],
+            )
+            .ok();
+        }
+    }
+    println!("✅ Rôles et permissions configurés");
+
+    // ==================== CRÉATION DE L'UTILISATEUR ADMIN PAR DÉFAUT ====================
+    use bcrypt::{hash, DEFAULT_COST};
+    let admin_password = hash("admin123", DEFAULT_COST).unwrap_or_default();
+
+    conn.execute(
+        "INSERT OR IGNORE INTO Utilisateur (NomUtilisateur, Email, MotDePasse, Nom, Prenom, Role, Statut) 
+         VALUES ('admin', 'admin@example.com', ?1, 'Administrateur', 'Système', 'admin', 1)",
+        params![admin_password],
+    ).ok();
+
+    println!("✅ Utilisateur admin créé avec:");
+    println!("   - Email: admin@example.com");
+    println!("   - Mot de passe: admin123");
+
     // ==================== LOG INITIAL ====================
     let _ = conn.execute(
         "INSERT INTO Logs (Utilisateur, Action, TableConcernee, Details) VALUES (?1, ?2, ?3, ?4)",
@@ -538,7 +683,7 @@ fn init_db() -> Result<Connection> {
             "System",
             "CREATE",
             "Database",
-            "Initialisation de la base de données"
+            "Initialisation de la base de données avec authentification"
         ],
     );
 
@@ -552,6 +697,7 @@ fn init_db() -> Result<Connection> {
     let nb_entetes_reco = entetes_reco.len();
     let nb_entetes_dossier = entetes_dossier.len();
     let nb_signataires = signataires.len();
+    let nb_permissions = permissions.len();
 
     println!("\n📊 RÉCAPITULATIF DE L'INITIALISATION DE LA BASE DE DONNÉES:");
     println!("   - Grades: {} entrées", nb_grades);
@@ -563,11 +709,12 @@ fn init_db() -> Result<Connection> {
     println!("   - Entêtes RECOMMANDATION: {} entrées", nb_entetes_reco);
     println!("   - Entêtes DOSSIER: {} entrées", nb_entetes_dossier);
     println!("   - Signataires: {} entrées", nb_signataires);
+    println!("   - Permissions: {} entrées", nb_permissions);
+    println!("   - Utilisateur admin créé");
     println!("✅ Base de données initialisée avec succès!");
 
     Ok(conn)
 }
-
 // ==================== COMMANDES AGENTS ====================
 #[tauri::command]
 fn create_agent(state: tauri::State<AppState>, agent: Value) -> Result<i64, String> {
@@ -1583,6 +1730,7 @@ pub fn run() {
             get_rapports,
             update_rapport,
             delete_rapport,
+            get_rapports_list,
             // Dossiers
             create_dossier,
             get_dossiers,
@@ -1623,7 +1771,6 @@ pub fn run() {
             move_signataire_down,
             // Paramètres Généraux
             get_parametres_generaux,
-            update_parametre_general,
             create_parametre_general,
             update_parametre_general,
             delete_parametre_general,
@@ -1639,14 +1786,21 @@ pub fn run() {
             log_action,
             // Config Entête (ancien)
             get_entete_config,
-            get_rapports_list,
+            // Commandes d'authentification
+            login,
+            logout,
+            verify_session,
+            change_password,
+            create_user,
+            get_users,
+            update_user_status,
+            delete_user,
             get_distinct_domaines,
+            get_distinct_domaines,
+            // add_domaine,  // ← SUPPRIMEZ CETTE LIGNE
         ])
         .run(generate_context!())
         .expect("error while running tauri application");
-}
-fn main() {
-    run();
 }
 // ==================== COMMANDES LOGS ====================
 #[tauri::command]
@@ -2193,4 +2347,460 @@ fn delete_parametre_general(state: tauri::State<AppState>, code: String) -> Resu
     }
 
     Ok(())
+}
+
+// ==================== COMMANDES D'AUTHENTIFICATION ====================
+
+use bcrypt::{hash, verify, DEFAULT_COST};
+use rand::Rng;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(serde::Serialize)]
+struct AuthResponse {
+    success: bool,
+    token: Option<String>,
+    user: Option<serde_json::Value>,
+    message: String,
+}
+
+#[derive(serde::Serialize)]
+struct UserInfo {
+    id: i64,
+    nom_utilisateur: String,
+    email: String,
+    nom: Option<String>,
+    prenom: Option<String>,
+    role: String,
+    permissions: Vec<String>,
+}
+
+#[tauri::command]
+fn login(
+    state: tauri::State<AppState>,
+    email: String,
+    password: String,
+    adresse_ip: Option<String>,
+) -> Result<AuthResponse, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Rechercher l'utilisateur par email
+    let user = conn.query_row(
+        "SELECT UtilisateurID, NomUtilisateur, Email, MotDePasse, Nom, Prenom, Role, Statut, TentativesConnexion 
+         FROM Utilisateur WHERE Email = ?1 AND Statut = 1",
+        [&email],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, i64>(8)?,
+            ))
+        },
+    );
+
+    match user {
+        Ok((
+            user_id,
+            nom_utilisateur,
+            user_email,
+            hashed_password,
+            nom,
+            prenom,
+            role,
+            _statut,
+            tentatives,
+        )) => {
+            // Vérifier si le compte est bloqué (5 tentatives)
+            if tentatives >= 5 {
+                return Ok(AuthResponse {
+                    success: false,
+                    token: None,
+                    user: None,
+                    message: "Compte bloqué. Veuillez contacter l'administrateur.".to_string(),
+                });
+            }
+
+            // Vérifier le mot de passe
+            match verify(&password, &hashed_password) {
+                Ok(true) => {
+                    // Générer un token
+                    let token: String = rand::thread_rng()
+                        .sample_iter(&rand::distributions::Alphanumeric)
+                        .take(64)
+                        .map(char::from)
+                        .collect();
+
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+                    let expiration = now + 86400; // 24 heures
+
+                    // Sauvegarder la session
+                    conn.execute(
+                        "INSERT INTO Session (Token, UtilisateurID, DateExpiration, AdresseIP, Actif) 
+                         VALUES (?1, ?2, ?3, ?4, 1)",
+                        params![&token, user_id, expiration, adresse_ip],
+                    ).map_err(|e| e.to_string())?;
+
+                    // Mettre à jour la dernière connexion et réinitialiser les tentatives
+                    conn.execute(
+                        "UPDATE Utilisateur SET DerniereConnexion = datetime('now'), TentativesConnexion = 0 
+                         WHERE UtilisateurID = ?1",
+                        [user_id],
+                    ).map_err(|e| e.to_string())?;
+
+                    // Récupérer les permissions
+                    let permissions: Vec<String> = {
+                        let mut stmt = conn
+                            .prepare(
+                                "SELECT p.Code FROM Permission p
+                             JOIN RolePermission rp ON p.PermissionID = rp.PermissionID
+                             WHERE rp.Role = ?1",
+                            )
+                            .map_err(|e| e.to_string())?;
+                        let rows = stmt
+                            .query_map([&role], |row| row.get(0))
+                            .map_err(|e| e.to_string())?;
+                        let mut perms = Vec::new();
+                        for row in rows {
+                            perms.push(row.map_err(|e| e.to_string())?);
+                        }
+                        perms
+                    };
+
+                    let user_info = UserInfo {
+                        id: user_id,
+                        nom_utilisateur,
+                        email: user_email,
+                        nom,
+                        prenom,
+                        role,
+                        permissions,
+                    };
+
+                    Ok(AuthResponse {
+                        success: true,
+                        token: Some(token),
+                        user: Some(serde_json::to_value(&user_info).unwrap()),
+                        message: "Connexion réussie".to_string(),
+                    })
+                }
+                Ok(false) => {
+                    // Incrémenter les tentatives
+                    conn.execute(
+                        "UPDATE Utilisateur SET TentativesConnexion = TentativesConnexion + 1 
+                         WHERE UtilisateurID = ?1",
+                        [user_id],
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                    let remaining = 4 - tentatives;
+                    Ok(AuthResponse {
+                        success: false,
+                        token: None,
+                        user: None,
+                        message: format!(
+                            "Mot de passe incorrect. Plus que {} tentatives.",
+                            remaining
+                        ),
+                    })
+                }
+                Err(e) => Err(e.to_string()),
+            }
+        }
+        Err(_) => Ok(AuthResponse {
+            success: false,
+            token: None,
+            user: None,
+            message: "Email ou mot de passe incorrect".to_string(),
+        }),
+    }
+}
+
+#[tauri::command]
+fn logout(state: tauri::State<AppState>, token: String) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.execute("UPDATE Session SET Actif = 0 WHERE Token = ?1", [token])
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn verify_session(
+    state: tauri::State<AppState>,
+    token: String,
+) -> Result<Option<UserInfo>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let result = conn.query_row(
+        "SELECT u.UtilisateurID, u.NomUtilisateur, u.Email, u.Nom, u.Prenom, u.Role, s.Actif
+         FROM Session s
+         JOIN Utilisateur u ON s.UtilisateurID = u.UtilisateurID
+         WHERE s.Token = ?1 AND s.Actif = 1 AND s.DateExpiration > ?2 AND u.Statut = 1",
+        params![token, now],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, String>(5)?,
+            ))
+        },
+    );
+
+    match result {
+        Ok((user_id, nom_utilisateur, email, nom, prenom, role)) => {
+            let permissions: Vec<String> = {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT p.Code FROM Permission p
+                     JOIN RolePermission rp ON p.PermissionID = rp.PermissionID
+                     WHERE rp.Role = ?1",
+                    )
+                    .map_err(|e| e.to_string())?;
+                let rows = stmt
+                    .query_map([&role], |row| row.get(0))
+                    .map_err(|e| e.to_string())?;
+                let mut perms = Vec::new();
+                for row in rows {
+                    perms.push(row.map_err(|e| e.to_string())?);
+                }
+                perms
+            };
+
+            Ok(Some(UserInfo {
+                id: user_id,
+                nom_utilisateur,
+                email,
+                nom,
+                prenom,
+                role,
+                permissions,
+            }))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+#[tauri::command]
+fn change_password(
+    state: tauri::State<AppState>,
+    token: String,
+    old_password: String,
+    new_password: String,
+) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Récupérer l'utilisateur
+    let user_id: i64 = conn
+        .query_row(
+            "SELECT UtilisateurID FROM Session WHERE Token = ?1 AND Actif = 1",
+            [&token],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let hashed_password: String = conn
+        .query_row(
+            "SELECT MotDePasse FROM Utilisateur WHERE UtilisateurID = ?1",
+            [user_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Vérifier l'ancien mot de passe
+    if !verify(&old_password, &hashed_password).map_err(|e| e.to_string())? {
+        return Err("Ancien mot de passe incorrect".to_string());
+    }
+
+    // Hasher le nouveau mot de passe
+    let new_hashed = hash(&new_password, DEFAULT_COST).map_err(|e| e.to_string())?;
+
+    // Mettre à jour
+    conn.execute(
+        "UPDATE Utilisateur SET MotDePasse = ?1, DateModification = datetime('now') WHERE UtilisateurID = ?2",
+        params![new_hashed, user_id],
+    ).map_err(|e| e.to_string())?;
+
+    Ok(true)
+}
+
+#[tauri::command]
+fn create_user(
+    state: tauri::State<AppState>,
+    token: String,
+    nom_utilisateur: String,
+    email: String,
+    password: String,
+    nom: Option<String>,
+    prenom: Option<String>,
+    role: String,
+) -> Result<i64, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Vérifier les droits admin
+    let user_role: String = conn
+        .query_row(
+            "SELECT u.Role FROM Session s JOIN Utilisateur u ON s.UtilisateurID = u.UtilisateurID 
+         WHERE s.Token = ?1 AND s.Actif = 1",
+            [&token],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if user_role != "admin" {
+        return Err("Droits insuffisants".to_string());
+    }
+
+    let hashed_password = hash(&password, DEFAULT_COST).map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO Utilisateur (NomUtilisateur, Email, MotDePasse, Nom, Prenom, Role, Statut) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)",
+        params![nom_utilisateur, email, hashed_password, nom, prenom, role],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(conn.last_insert_rowid())
+}
+
+#[tauri::command]
+fn get_users(
+    state: tauri::State<AppState>,
+    token: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Vérifier les droits admin
+    let user_role: String = conn
+        .query_row(
+            "SELECT u.Role FROM Session s JOIN Utilisateur u ON s.UtilisateurID = u.UtilisateurID 
+         WHERE s.Token = ?1 AND s.Actif = 1",
+            [&token],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if user_role != "admin" {
+        return Err("Droits insuffisants".to_string());
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT UtilisateurID, NomUtilisateur, Email, Nom, Prenom, Role, Statut, 
+         TentativesConnexion, DerniereConnexion, DateCreation 
+         FROM Utilisateur ORDER BY DateCreation DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(serde_json::json!({
+                "UtilisateurID": row.get::<_, i64>(0)?,
+                "NomUtilisateur": row.get::<_, String>(1)?,
+                "Email": row.get::<_, String>(2)?,
+                "Nom": row.get::<_, Option<String>>(3)?,
+                "Prenom": row.get::<_, Option<String>>(4)?,
+                "Role": row.get::<_, String>(5)?,
+                "Statut": row.get::<_, i64>(6)?,
+                "TentativesConnexion": row.get::<_, i64>(7)?,
+                "DerniereConnexion": row.get::<_, Option<String>>(8)?,
+                "DateCreation": row.get::<_, String>(9)?,
+            }))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn update_user_status(
+    state: tauri::State<AppState>,
+    token: String,
+    user_id: i64,
+    statut: i64,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Vérifier les droits admin
+    let user_role: String = conn
+        .query_row(
+            "SELECT u.Role FROM Session s JOIN Utilisateur u ON s.UtilisateurID = u.UtilisateurID 
+         WHERE s.Token = ?1 AND s.Actif = 1",
+            [&token],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if user_role != "admin" {
+        return Err("Droits insuffisants".to_string());
+    }
+
+    conn.execute(
+        "UPDATE Utilisateur SET Statut = ?1, DateModification = datetime('now') WHERE UtilisateurID = ?2",
+        params![statut, user_id],
+    ).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_user(state: tauri::State<AppState>, token: String, user_id: i64) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Vérifier les droits admin
+    let user_role: String = conn
+        .query_row(
+            "SELECT u.Role FROM Session s JOIN Utilisateur u ON s.UtilisateurID = u.UtilisateurID 
+         WHERE s.Token = ?1 AND s.Actif = 1",
+            [&token],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if user_role != "admin" {
+        return Err("Droits insuffisants".to_string());
+    }
+
+    // Ne pas supprimer l'admin principal
+    let is_admin: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM Utilisateur WHERE UtilisateurID = ?1 AND Role = 'admin'",
+            [user_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    if is_admin > 0 {
+        return Err("Impossible de supprimer le compte administrateur principal".to_string());
+    }
+
+    conn.execute(
+        "DELETE FROM Utilisateur WHERE UtilisateurID = ?1",
+        [user_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+// ==================== POINT D'ENTRÉE PRINCIPAL ====================
+fn main() {
+    run();
 }

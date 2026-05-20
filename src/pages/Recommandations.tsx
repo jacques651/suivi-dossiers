@@ -3,11 +3,10 @@ import {
   Table, Button, Modal, TextInput, Stack, Title, Card,
   Group, ActionIcon, Select, Textarea, Grid, Badge,
   Avatar, Text, Divider, Loader, Pagination, Tooltip,
-  Box, Container, Paper, 
-  ScrollArea, Center, Alert, Menu, 
+  Box, Container, Paper,
+  ScrollArea, Center, Alert, Menu,
   Autocomplete,
-  Transition
-} from '@mantine/core';
+  Transition} from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import {
@@ -25,7 +24,8 @@ import {
   IconFileWord,
   IconInfoCircle,
   IconX,
-  IconTrash
+  IconTrash,
+  IconEye
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
@@ -84,8 +84,12 @@ export default function Recommandations() {
   const [activePage, setActivePage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [infoModalOpen, setInfoModalOpen] = useState(false);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(10);
+  const [domaineOptions, setDomaineOptions] = useState<string[]>([]);
+  const [currentDomaineInput, setCurrentDomaineInput] = useState('');
+
   const { printDocument } = usePrint();
+
   const form = useForm({
     initialValues: {
       Services: '',
@@ -122,14 +126,13 @@ export default function Recommandations() {
   useEffect(() => {
     loadRecommandations();
     loadRapports();
-    loadExistingDomaines();
+    loadDomainesExistants();
   }, []);
 
   const loadRecommandations = async () => {
     setLoading(true);
     try {
       const result = await invoke('get_recommandations');
-      console.log('DONNÉES BRUTES:', JSON.stringify(result, null, 2)); // ← Ajoute cette ligne
       setRecommandations(result as Recommandation[]);
     } catch (error) {
       notifications.show({ title: 'Erreur', message: 'Impossible de charger les recommandations', color: 'red' });
@@ -147,8 +150,68 @@ export default function Recommandations() {
     }
   };
 
+const loadDomainesExistants = async () => {
+  try {
+    // Changez 'get_distinct_domaines_from_recommandations' par 'get_distinct_domaines'
+    const domaines = await invoke<string[]>('get_distinct_domaines');
+    if (domaines && domaines.length > 0) {
+      setDomaineOptions(domaines);
+    } else {
+      setDomaineOptions([]);
+    }
+  } catch (error) {
+    console.error('Erreur chargement domaines:', error);
+    setDomaineOptions([]);
+  }
+};
+  const addNewDomaine = async (nouveauDomaine: string) => {
+    if (!nouveauDomaine || nouveauDomaine.trim() === '') return;
+
+    const domaineTrimmed = nouveauDomaine.trim();
+
+    if (domaineOptions.some(d => d.toLowerCase() === domaineTrimmed.toLowerCase())) {
+      notifications.show({
+        title: 'Domaine existant',
+        message: `"${domaineTrimmed}" existe déjà dans la liste`,
+        color: 'yellow',
+        icon: <IconInfoCircle size={16} />
+      });
+      return;
+    }
+
+    try {
+      try {
+        await invoke('add_domaine', { domaine: domaineTrimmed });
+      } catch {
+        console.log('Table domaines non disponible');
+      }
+
+      setDomaineOptions(prev => [...prev, domaineTrimmed]);
+
+      notifications.show({
+        title: 'Nouveau domaine ajouté',
+        message: `"${domaineTrimmed}" a été ajouté aux options`,
+        color: 'green',
+        icon: <IconCheck size={16} />
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout du domaine:', error);
+      setDomaineOptions(prev => [...prev, domaineTrimmed]);
+    }
+  };
+
   const handleSubmit = async (values: typeof form.values) => {
     try {
+      if (values.Domaine && values.Domaine.trim() !== '') {
+        const domaineExists = domaineOptions.some(
+          option => option.toLowerCase() === values.Domaine.toLowerCase()
+        );
+
+        if (!domaineExists) {
+          setDomaineOptions(prev => [...prev, values.Domaine.trim()]);
+        }
+      }
+
       const recommandationData = {
         ...values,
         RapportID: parseInt(values.RapportID),
@@ -166,8 +229,10 @@ export default function Recommandations() {
 
       setModalOpen(false);
       form.reset();
+      setCurrentDomaineInput('');
       setEditingId(null);
       loadRecommandations();
+      loadDomainesExistants();
     } catch (error) {
       notifications.show({ title: 'Erreur', message: `Erreur: ${error}`, color: 'red', icon: <IconX size={16} /> });
     }
@@ -237,16 +302,6 @@ export default function Recommandations() {
     }
   };
 
-  const getEcheanceStatus = (echeance?: string) => {
-    if (!echeance) return null;
-    switch (echeance) {
-      case 'Court terme': return <Badge color="red" size="sm">Urgent</Badge>;
-      case 'Moyen terme': return <Badge color="orange" size="sm">Intermédiaire</Badge>;
-      case 'Long terme': return <Badge color="green" size="sm">Planifié</Badge>;
-      default: return null;
-    }
-  };
-
   const getTauxRealisation = () => {
     const total = recommandations.length;
     if (total === 0) return 0;
@@ -254,7 +309,6 @@ export default function Recommandations() {
     return (realisees / total) * 100;
   };
 
-  // Export EXCEL
   const exportToExcel = async () => {
     try {
       setExporting(true);
@@ -289,7 +343,6 @@ export default function Recommandations() {
     }
   };
 
-  // Export PDF
   const exportToPDF = async () => {
     try {
       setExporting(true);
@@ -341,7 +394,6 @@ export default function Recommandations() {
     }
   };
 
-  // Export Word
   const exportToWord = async () => {
     try {
       setExporting(true);
@@ -359,11 +411,7 @@ export default function Recommandations() {
           <td style="border:1px solid #ddd;padding:8px">${rec.TexteRecommandation.substring(0, 100)}...</td>
           <td style="border:1px solid #ddd;padding:8px">${rec.NumeroRapport || '-'}</td>
           <td style="border:1px solid #ddd;padding:8px">${rec.ResponsableMiseEnOeuvre || '-'}</td>
-          <td style="border:1px solid #ddd;padding:8px">
-  <span class="badge" style="background:${rec.Echeance === 'Court terme' ? '#e03131' : rec.Echeance === 'Moyen terme' ? '#f08c00' : rec.Echeance === 'Long terme' ? '#2f9e44' : '#868e96'};color:white;padding:4px 8px;border-radius:12px;font-size:11px">
-    ${rec.Echeance || '-'}
-  </span>
-</td>
+          <td style="border:1px solid #ddd;padding:8px">${rec.Echeance || '-'}</td>
           <td style="border:1px solid #ddd;padding:8px">${rec.NiveauMiseEnOeuvre || 'Non commencé'}</td>
         </tr>
       `).join('');
@@ -397,9 +445,7 @@ export default function Recommandations() {
     }
   };
 
-  // Impression
   const handlePrint = (orientation: 'portrait' | 'landscape') => {
-
     const rows = filteredRecommandations.map((rec, idx) => `
     <tr>
       <td>${idx + 1}</td>
@@ -432,7 +478,6 @@ export default function Recommandations() {
     printDocument(content, 'LISTE DES RECOMMANDATIONS', orientation);
   };
 
-  // Filtrage des recommandations
   const filteredRecommandations = recommandations.filter(rec => {
     const matchesSearch = rec.TexteRecommandation.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (rec.NumeroRecommandation && rec.NumeroRecommandation.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -440,48 +485,11 @@ export default function Recommandations() {
     return matchesSearch && matchesStatut;
   });
 
-  // Pour les domaines dynamiques (auto-complétion)
-  const [domaineOptions, setDomaineOptions] = useState<string[]>([]);
-
-  // Au chargement, récupérer les domaines existants depuis la base
-  useEffect(() => {
-    loadDomainesExistants();
-  }, []);
-
-  const loadDomainesExistants = async () => {
-    try {
-      const domaines = await invoke<string[]>('get_distinct_domaines');
-      if (domaines && domaines.length > 0) {
-        setDomaineOptions(prev => [...new Set([...prev, ...domaines])]);
-      }
-    } catch (error) {
-      console.error('Erreur chargement domaines:', error);
-    }
-  };
-
   const totalPages = Math.ceil(filteredRecommandations.length / itemsPerPage);
   const paginatedRecommandations = filteredRecommandations.slice(
     (activePage - 1) * itemsPerPage,
     activePage * itemsPerPage
   );
-
-
-  // Fonction pour charger les domaines distincts depuis la base
-  const loadExistingDomaines = async () => {
-    try {
-      const domaines = await invoke<string[]>('get_distinct_domaines');
-      if (domaines && domaines.length > 0) {
-        setDomaineOptions(domaines);
-      } else {
-        // Valeurs par défaut si aucun domaine n'existe
-        setDomaineOptions([]);
-      }
-    } catch (error) {
-      console.error('Erreur chargement domaines:', error);
-      // Valeurs par défaut en cas d'erreur
-      setDomaineOptions([]);
-    }
-  };
 
   const rapportOptions = rapports.map(rapport => ({
     value: rapport.RapportID.toString(),
@@ -535,7 +543,6 @@ export default function Recommandations() {
             </Group>
           </Card>
 
-          {/* Cartes Statistiques - exactement comme AgentStatsCards */}
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
             {(styles) => (
               <div style={styles}>
@@ -543,7 +550,8 @@ export default function Recommandations() {
               </div>
             )}
           </Transition>
-          {/* Barre d'actions - le reste du code reste identique */}
+
+          {/* Barre d'actions */}
           <Card withBorder radius="lg" shadow="sm" p="md">
             <Group justify="space-between" align="flex-end" mb="md">
               <Box>
@@ -575,18 +583,12 @@ export default function Recommandations() {
                       </ActionIcon>
                     </Tooltip>
                   </Menu.Target>
-
                   <Menu.Dropdown>
-                    <Menu.Item onClick={() => handlePrint('portrait')}>
-                      🧾 Portrait
-                    </Menu.Item>
-
-                    <Menu.Item onClick={() => handlePrint('landscape')}>
-                      📄 Paysage
-                    </Menu.Item>
+                    <Menu.Item onClick={() => handlePrint('portrait')}>🧾 Portrait</Menu.Item>
+                    <Menu.Item onClick={() => handlePrint('landscape')}>📄 Paysage</Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
-                <Button leftSection={<IconPlus size={16} />} onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }} variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}>
+                <Button leftSection={<IconPlus size={16} />} onClick={() => { setEditingId(null); form.reset(); setCurrentDomaineInput(''); setModalOpen(true); }} variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}>
                   Nouvelle Recommandation
                 </Button>
               </Group>
@@ -594,7 +596,6 @@ export default function Recommandations() {
 
             <Divider my="md" />
 
-            {/* Filtres */}
             <Grid>
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <TextInput
@@ -618,143 +619,106 @@ export default function Recommandations() {
             </Grid>
           </Card>
 
-          <Card withBorder radius="lg" shadow="sm" p="md">
-            <ScrollArea h={500}>
-
+          {/* Tableau */}
+          <Card withBorder radius="lg" shadow="sm" p="0" style={{ overflow: 'hidden' }}>
+            <ScrollArea style={{ maxHeight: 500 }}>
               <Table
                 striped
                 highlightOnHover
-                verticalSpacing="md"
-                horizontalSpacing="md"
-                withColumnBorders
+                style={{ fontSize: '11px', minWidth: '1200px' }}
               >
-
-                {/* HEADER */}
                 <Table.Thead style={{ backgroundColor: '#1b365d' }}>
                   <Table.Tr>
-                    <Table.Th w={80} ta="center" c="white">N°</Table.Th>
-                    <Table.Th c="white">Recommandation</Table.Th>
-                    <Table.Th w={200} c="white">Rapport</Table.Th>
-                    <Table.Th w={180} c="white">Responsable</Table.Th>
-                    <Table.Th w={140} c="white" ta="center">Échéance</Table.Th>
-                    <Table.Th w={150} c="white" ta="center">Statut</Table.Th>
-                    <Table.Th w={120} c="white" ta="center">Actions</Table.Th>
+                    <Table.Th style={{ color: 'white', width: '70px', fontSize: '11px', padding: '8px 4px' }}>N°</Table.Th>
+                    <Table.Th style={{ color: 'white', width: '250px', fontSize: '11px', padding: '8px 4px' }}>Recommandation</Table.Th>
+                    <Table.Th style={{ color: 'white', width: '350px', fontSize: '11px', padding: '8px 4px' }}>Rapport associé</Table.Th>
+                    <Table.Th style={{ color: 'white', width: '180px', fontSize: '11px', padding: '8px 4px' }}>Responsable</Table.Th>
+                    <Table.Th style={{ color: 'white', width: '100px', fontSize: '11px', padding: '8px 4px' }}>Échéance</Table.Th>
+                    <Table.Th style={{ color: 'white', width: '120px', fontSize: '11px', padding: '8px 4px' }}>Statut</Table.Th>
+                    <Table.Th style={{ color: 'white', width: '140px', fontSize: '11px', padding: '8px 4px', textAlign: 'center' }}>Actions</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
-
-                {/* BODY */}
                 <Table.Tbody>
-
                   {paginatedRecommandations.length === 0 ? (
                     <Table.Tr>
                       <Table.Td colSpan={7}>
                         <Center py="xl">
-                          <Stack align="center" gap="xs">
-                            <IconListCheck size={48} color="gray" opacity={0.5} />
-                            <Text c="dimmed" size="sm">
-                              Aucune recommandation trouvée
-                            </Text>
-                            <Button
-                              variant="subtle"
-                              size="xs"
-                              onClick={() => {
-                                setSearchTerm('');
-                                setFilterStatut(null);
-                              }}
-                            >
-                              Réinitialiser les filtres
-                            </Button>
+                          <Stack align="center">
+                            <IconListCheck size={48} color="gray" />
+                            <Text c="dimmed" size="sm">Aucune recommandation trouvée</Text>
                           </Stack>
                         </Center>
                       </Table.Td>
                     </Table.Tr>
                   ) : (
-
                     paginatedRecommandations.map((rec) => (
                       <Table.Tr key={rec.RecommandationID}>
-
-                        {/* NUMERO */}
-                        <Table.Td ta="center">
-                          <Badge variant="light" color="blue">
-                            {rec.NumeroRecommandation || rec.RecommandationID}
-                          </Badge>
+                        <Table.Td style={{ padding: '6px 4px' }}>
+                          <Badge variant="light" color="blue" size="sm" radius="md">{rec.NumeroRecommandation || rec.RecommandationID}</Badge>
                         </Table.Td>
-
-                        {/* RECOMMANDATION */}
-                        <Table.Td>
+                        <Table.Td style={{ padding: '6px 4px' }}>
                           <Stack gap={4}>
-                            <Text fw={500} size="sm" lineClamp={2}>
-                              {rec.TexteRecommandation}
-                            </Text>
-
-                            {rec.ProblemeFaiblesse && (
-                              <Text size="xs" c="dimmed" lineClamp={1}>
-                                {rec.ProblemeFaiblesse}
-                              </Text>
-                            )}
+                            <Text fw={500} size="xs" lineClamp={2}>{rec.TexteRecommandation}</Text>
+                            {rec.ProblemeFaiblesse && <Text size="xs" c="dimmed" lineClamp={1}>⚠️ {rec.ProblemeFaiblesse}</Text>}
                           </Stack>
                         </Table.Td>
-
-                        {/* RAPPORT */}
-                        <Table.Td>
-                          <Stack gap={2}>
-                            <Text fw={500} size="sm">
-                              {rec.NumeroRapport || '-'}
-                            </Text>
-                            <Text size="xs" c="dimmed" lineClamp={1}>
-                              {rec.LibelleRapport || '-'}
-                            </Text>
-                          </Stack>
+                        <Table.Td style={{ padding: '6px 4px' }}>
+                          <Tooltip
+                            label={
+                              <Stack gap={4} p="xs">
+                                <Text fw={700} size="sm">Détails du rapport :</Text>
+                                <Text size="xs">📄 Numéro: {rec.NumeroRapport || 'Non défini'}</Text>
+                                {rec.LibelleRapport && <Text size="xs">📝 Libellé: {rec.LibelleRapport}</Text>}
+                                <Text size="xs">🔗 ID: {rec.RapportID || '-'}</Text>
+                              </Stack>
+                            }
+                            withArrow
+                            position="bottom"
+                            w={300}
+                            multiline
+                          >
+                            <Paper p="xs" bg="gray.0" radius="md" withBorder style={{ cursor: 'pointer' }}>
+                              <Stack gap={2}>
+                                <Group gap={4} wrap="nowrap">
+                                  <IconFile size={12} color="#1b365d" />
+                                  <Text fw={700} size="xs" c="blue" truncate>{rec.NumeroRapport || 'N° non défini'}</Text>
+                                </Group>
+                                {rec.LibelleRapport && <Text size="xs" c="dimmed" truncate lineClamp={1}>{rec.LibelleRapport}</Text>}
+                              </Stack>
+                            </Paper>
+                          </Tooltip>
                         </Table.Td>
-
-                        {/* RESPONSABLE */}
-                        <Table.Td>
+                        <Table.Td style={{ padding: '6px 4px' }}>
                           <Group gap={6} wrap="nowrap">
                             <IconUser size={14} color="gray" />
-                            <Text size="sm" lineClamp={1}>
-                              {rec.ResponsableMiseEnOeuvre || '-'}
-                            </Text>
+                            <Text size="xs" truncate>{rec.ResponsableMiseEnOeuvre || 'Non attribué'}</Text>
                           </Group>
                         </Table.Td>
-
-                        {/* ECHEANCE */}
-                        <Table.Td ta="center">
+                        <Table.Td style={{ padding: '6px 4px' }}>
                           <Stack gap={2} align="center">
-                            <Text size="sm">
-                              {rec.Echeance || '-'}
-                            </Text>
-                            {getEcheanceStatus(rec.Echeance)}
+                            <Text size="xs" fw={500}>{rec.Echeance || '-'}</Text>
+                            {rec.Echeance === 'Court terme' && <Badge color="red" size="xs" variant="filled">Urgent</Badge>}
+                            {rec.Echeance === 'Moyen terme' && <Badge color="orange" size="xs" variant="filled">Intermédiaire</Badge>}
+                            {rec.Echeance === 'Long terme' && <Badge color="green" size="xs" variant="filled">Planifié</Badge>}
                           </Stack>
                         </Table.Td>
-
-                        {/* STATUT */}
-                        <Table.Td ta="center">
-                          <Badge
-                            color={getNiveauColor(rec.NiveauMiseEnOeuvre)}
-                            variant="light"
-                          >
+                        <Table.Td style={{ padding: '6px 4px' }}>
+                          <Badge color={getNiveauColor(rec.NiveauMiseEnOeuvre)} variant="light" size="xs">
                             {rec.NiveauMiseEnOeuvre || 'Non commencé'}
                           </Badge>
                         </Table.Td>
-
-                        {/* ACTIONS */}
-                        <Table.Td>
-                          <Group justify="center" gap={6} wrap="nowrap">
-
+                        <Table.Td style={{ padding: '6px 4px' }}>
+                          <Group justify="center" gap={4} wrap="nowrap">
                             <Tooltip label="Voir détails">
-                              <ActionIcon
-                                onClick={() => handleView(rec)}
-                                color="green"
-                                variant="light"
-                              >
-                                <IconListCheck size={16} />
+                              <ActionIcon onClick={() => handleView(rec)} color="green" variant="light" size="sm">
+                                <IconEye size={16} />
                               </ActionIcon>
                             </Tooltip>
-
-                            <Tooltip label="Modifier" withArrow>
+                            <Tooltip label="Modifier">
                               <ActionIcon
                                 onClick={() => {
                                   setEditingId(rec.RecommandationID);
+                                  setCurrentDomaineInput(rec.Domaine || '');
                                   form.setValues({
                                     Services: rec.Services || '',
                                     Source: rec.Source || '',
@@ -770,142 +734,33 @@ export default function Recommandations() {
                                   });
                                   setModalOpen(true);
                                 }}
-                                color="orange"
-                                variant="light"
-                                size="sm"
+                                color="orange" variant="light" size="sm"
                               >
                                 <IconEdit size={16} />
                               </ActionIcon>
                             </Tooltip>
-
                             <Tooltip label="Suivi">
-                              <ActionIcon
-                                onClick={() => openSuiviModal(rec)}
-                                color="blue"
-                                variant="light"
-                              >
+                              <ActionIcon onClick={() => openSuiviModal(rec)} color="blue" variant="light" size="sm">
                                 <IconEdit size={16} />
                               </ActionIcon>
                             </Tooltip>
-
                             <Tooltip label="Supprimer">
                               <ActionIcon
-                                onClick={() => {
-                                  setRecommandationToDelete(rec.RecommandationID);
-                                  setDeleteModalOpen(true);
-                                }}
-                                color="red"
-                                variant="light"
+                                onClick={() => { setRecommandationToDelete(rec.RecommandationID); setDeleteModalOpen(true); }}
+                                color="red" variant="light" size="sm"
                               >
                                 <IconTrash size={16} />
                               </ActionIcon>
                             </Tooltip>
-
                           </Group>
                         </Table.Td>
-
                       </Table.Tr>
                     ))
-
                   )}
-
                 </Table.Tbody>
               </Table>
-
             </ScrollArea>
           </Card>
-
-          {/* Pagination améliorée */}
-          {totalPages > 1 && (
-            <Card withBorder radius="lg" shadow="sm" p="md" mt="md" style={{ backgroundColor: '#f8f9fa' }}>
-              <Group justify="space-between" align="center" wrap="wrap" gap="md">
-                <Text size="sm" c="dimmed">
-                  Affichage de {(activePage - 1) * itemsPerPage + 1} à {Math.min(activePage * itemsPerPage, filteredRecommandations.length)} sur {filteredRecommandations.length} recommandation(s)
-                </Text>
-
-                <Group gap="xs">
-                  <Tooltip label="Première page" withArrow>
-                    <ActionIcon
-                      variant="default"
-                      onClick={() => setActivePage(1)}
-                      disabled={activePage === 1}
-                      size="md"
-                    >
-                      «
-                    </ActionIcon>
-                  </Tooltip>
-
-                  <Tooltip label="Page précédente" withArrow>
-                    <ActionIcon
-                      variant="default"
-                      onClick={() => setActivePage(prev => Math.max(1, prev - 1))}
-                      disabled={activePage === 1}
-                      size="md"
-                    >
-                      ‹
-                    </ActionIcon>
-                  </Tooltip>
-
-                  <Select
-                    value={activePage.toString()}
-                    onChange={(val) => setActivePage(parseInt(val || '1'))}
-                    data={Array.from({ length: Math.min(totalPages, 50) }, (_, i) => ({
-                      value: (i + 1).toString(),
-                      label: `Page ${i + 1}`
-                    }))}
-                    style={{ width: 100 }}
-                    size="sm"
-                  />
-
-                  <Tooltip label="Page suivante" withArrow>
-                    <ActionIcon
-                      variant="default"
-                      onClick={() => setActivePage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={activePage === totalPages}
-                      size="md"
-                    >
-                      ›
-                    </ActionIcon>
-                  </Tooltip>
-
-                  <Tooltip label="Dernière page" withArrow>
-                    <ActionIcon
-                      variant="default"
-                      onClick={() => setActivePage(totalPages)}
-                      disabled={activePage === totalPages}
-                      size="md"
-                    >
-                      »
-                    </ActionIcon>
-                  </Tooltip>
-                </Group>
-
-                <Select
-                  label="Lignes par page"
-                  value={itemsPerPage.toString()}
-                  onChange={(val: string | null) => {
-                    const newValue = val ? parseInt(val) : 10;
-                    setItemsPerPage(newValue);
-                    setActivePage(1);
-                  }}
-                  data={[
-                    { value: '10', label: '10 lignes' },
-                    { value: '25', label: '25 lignes' },
-                    { value: '50', label: '50 lignes' },
-                    { value: '100', label: '100 lignes' }
-                  ]}
-                  size="sm"
-                  style={{ width: 130 }}
-                />
-              </Group>
-            </Card>
-          )}
-          {/* Indicateur de chargement pendant le changement de page */}
-          {loading && (
-            <Center mt="md">
-              <Loader size="sm" color="#1b365d" />
-            </Center>
-          )}
 
           {totalPages > 1 && (
             <Group justify="center" mt="md">
@@ -918,17 +773,12 @@ export default function Recommandations() {
       {/* Modal Formulaire */}
       <Modal
         opened={modalOpen}
-        onClose={() => { setModalOpen(false); form.reset(); }}
-        title={
-          <Group gap="sm">
-            {editingId ? <IconEdit size={20} color="#1b365d" /> : <IconPlus size={20} color="#1b365d" />}
-            <Text fw={700} size="lg">{editingId ? "Modifier la Recommandation" : "Nouvelle Recommandation"}</Text>
-          </Group>
-        }
+        onClose={() => { setModalOpen(false); form.reset(); setCurrentDomaineInput(''); }}
+        title={<Text fw={600} size="md">{editingId ? "Modifier la Recommandation" : "Nouvelle Recommandation"}</Text>}
         size="xl"
         centered
-        overlayProps={{ blur: 3 }}
-        transitionProps={{ transition: 'fade', duration: 200 }}
+        scrollAreaComponent={ScrollArea.Autosize}
+        styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}
       >
         <form onSubmit={form.onSubmit(handleSubmit)}>
           <Stack gap="md">
@@ -937,10 +787,16 @@ export default function Recommandations() {
               placeholder="Sélectionner un rapport"
               data={rapportOptions}
               {...form.getInputProps('RapportID')}
-              required
-              searchable
+              required searchable size="md"
+            />
+
+            <TextInput
+              label="Problème / Faiblesse identifié(e)"
+              placeholder="Description du problème"
+              {...form.getInputProps('ProblemeFaiblesse')}
               size="md"
             />
+
             <Grid>
               <Grid.Col span={6}>
                 <TextInput
@@ -951,14 +807,23 @@ export default function Recommandations() {
                 />
               </Grid.Col>
               <Grid.Col span={6}>
-                {/* Utilisation de Autocomplete au lieu de Select */}
-                <Autocomplete
-                  label="Domaine"
-                  placeholder="Sélectionner ou saisir un domaine"
-                  data={domaineOptions}
-                  {...form.getInputProps('Domaine')}
-                  size="md"
-                />
+                <Group align="flex-end" gap="xs">
+                  <div style={{ flex: 1 }}>
+                    <Autocomplete
+                      label="Domaine"
+                      placeholder="Sélectionner ou saisir un domaine"
+                      data={domaineOptions}
+                      {...form.getInputProps('Domaine')}
+                      size="md"
+                      onChange={(value) => { form.setFieldValue('Domaine', value); setCurrentDomaineInput(value); }}
+                    />
+                  </div>
+                  {currentDomaineInput && currentDomaineInput !== form.values.Domaine && !domaineOptions.includes(currentDomaineInput) && (
+                    <Button size="sm" variant="light" color="green" onClick={() => { addNewDomaine(currentDomaineInput); form.setFieldValue('Domaine', currentDomaineInput); setCurrentDomaineInput(''); }}>
+                      <IconPlus size={16} /> Ajouter
+                    </Button>
+                  )}
+                </Group>
               </Grid.Col>
               <Grid.Col span={12}>
                 <Textarea
@@ -966,16 +831,7 @@ export default function Recommandations() {
                   placeholder="Décrire la recommandation..."
                   rows={3}
                   {...form.getInputProps('TexteRecommandation')}
-                  required
-                  size="md"
-                />
-              </Grid.Col>
-              <Grid.Col span={12}>
-                <TextInput
-                  label="Problème / Faiblesse identifié(e)"
-                  placeholder="Description du problème"
-                  {...form.getInputProps('ProblemeFaiblesse')}
-                  size="md"
+                  required size="md"
                 />
               </Grid.Col>
               <Grid.Col span={6}>
@@ -987,7 +843,6 @@ export default function Recommandations() {
                 />
               </Grid.Col>
               <Grid.Col span={6}>
-                {/* Échéance : Select avec Court/Moyen/Long terme */}
                 <Select
                   label="Échéance"
                   placeholder="Sélectionner le délai"
@@ -1023,9 +878,10 @@ export default function Recommandations() {
                 />
               </Grid.Col>
             </Grid>
-            <Group justify="flex-end" mt="md">
-              <Button variant="light" onClick={() => setModalOpen(false)}>Annuler</Button>
-              <Button type="submit" color="blue">{editingId ? 'Modifier' : 'Créer'}</Button>
+
+            <Group justify="flex-end">
+              <Button variant="subtle" onClick={() => { setModalOpen(false); form.reset(); setCurrentDomaineInput(''); }}>Annuler</Button>
+              <Button type="submit">{editingId ? 'Modifier' : 'Créer'}</Button>
             </Group>
           </Stack>
         </form>
@@ -1035,16 +891,11 @@ export default function Recommandations() {
       <Modal
         opened={suiviModalOpen}
         onClose={() => { setSuiviModalOpen(false); setSelectedRecommandation(null); }}
-        title={
-          <Group gap="sm">
-            <IconEdit size={20} color="#1b365d" />
-            <Text fw={700} size="lg">Suivi de la recommandation</Text>
-          </Group>
-        }
+        title={<Text fw={600} size="md">Suivi de la recommandation</Text>}
         size="xl"
         centered
-        overlayProps={{ blur: 3 }}
-        transitionProps={{ transition: 'fade', duration: 200 }}
+        scrollAreaComponent={ScrollArea.Autosize}
+        styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}
       >
         {selectedRecommandation && (
           <form onSubmit={suiviForm.onSubmit(handleUpdateSuivi)}>
@@ -1062,70 +913,28 @@ export default function Recommandations() {
 
               <Select
                 label="Niveau de mise en œuvre"
-                data={[
-                  'Non commencé',
-                  'En cours',
-                  'Partiellement réalisée',
-                  'Réalisée',
-                  'Abandonnée'
-                ]}
+                data={['Non commencé', 'En cours', 'Partiellement réalisée', 'Réalisée', 'Abandonnée']}
                 {...suiviForm.getInputProps('NiveauMiseEnOeuvre')}
                 size="md"
               />
 
               <Grid>
                 <Grid.Col span={6}>
-                  <DateInput
-                    label="Date de début"
-                    placeholder="Début des actions"
-                    {...suiviForm.getInputProps('DateDebut')}
-                    size="md"
-                  />
+                  <DateInput label="Date de début" placeholder="Début des actions" {...suiviForm.getInputProps('DateDebut')} size="md" />
                 </Grid.Col>
                 <Grid.Col span={6}>
-                  <DateInput
-                    label="Date de fin"
-                    placeholder="Fin prévue"
-                    {...suiviForm.getInputProps('DateFin')}
-                    size="md"
-                  />
+                  <DateInput label="Date de fin" placeholder="Fin prévue" {...suiviForm.getInputProps('DateFin')} size="md" />
                 </Grid.Col>
               </Grid>
 
-              <Textarea
-                label="Mesures correctives prises"
-                placeholder="Décrire les actions entreprises..."
-                rows={3}
-                {...suiviForm.getInputProps('MesuresCorrectives')}
-                size="md"
-              />
+              <Textarea label="Mesures correctives prises" placeholder="Décrire les actions entreprises..." rows={3} {...suiviForm.getInputProps('MesuresCorrectives')} size="md" />
+              <Textarea label="Observation sur les délais" placeholder="Respect des délais, retards, etc." rows={2} {...suiviForm.getInputProps('ObservationDelai')} size="md" />
+              <Textarea label="Observation sur la mise en œuvre" placeholder="Difficultés rencontrées, succès, etc." rows={2} {...suiviForm.getInputProps('ObservationMiseEnOeuvre')} size="md" />
+              <Select label="Appréciation du contrôle" data={['Excellent', 'Bon', 'Satisfaisant', 'Insuffisant', 'Critique']} {...suiviForm.getInputProps('AppreciationControle')} size="md" />
 
-              <Textarea
-                label="Observation sur les délais"
-                placeholder="Respect des délais, retards, etc."
-                rows={2}
-                {...suiviForm.getInputProps('ObservationDelai')}
-                size="md"
-              />
-
-              <Textarea
-                label="Observation sur la mise en œuvre"
-                placeholder="Difficultés rencontrées, succès, etc."
-                rows={2}
-                {...suiviForm.getInputProps('ObservationMiseEnOeuvre')}
-                size="md"
-              />
-
-              <Select
-                label="Appréciation du contrôle"
-                data={['Excellent', 'Bon', 'Satisfaisant', 'Insuffisant', 'Critique']}
-                {...suiviForm.getInputProps('AppreciationControle')}
-                size="md"
-              />
-
-              <Group justify="flex-end" mt="md">
-                <Button variant="light" onClick={() => setSuiviModalOpen(false)}>Annuler</Button>
-                <Button type="submit" color="blue">Enregistrer le suivi</Button>
+              <Group justify="flex-end">
+                <Button variant="subtle" onClick={() => setSuiviModalOpen(false)}>Annuler</Button>
+                <Button type="submit">Enregistrer le suivi</Button>
               </Group>
             </Stack>
           </form>
@@ -1136,23 +945,18 @@ export default function Recommandations() {
       <Modal
         opened={viewModalOpen}
         onClose={() => setViewModalOpen(false)}
-        title={
-          <Group gap="sm">
-            <IconListCheck size={20} color="#1b365d" />
-            <Text fw={700} size="lg">Détails de la Recommandation</Text>
-          </Group>
-        }
-        size="lg"
+        title={<Text fw={600} size="md">Détails de la Recommandation</Text>}
+        size="xl"
         centered
-        overlayProps={{ blur: 3 }}
-        transitionProps={{ transition: 'fade', duration: 200 }}
+        scrollAreaComponent={ScrollArea.Autosize}
+        styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}
       >
         {selectedRecommandation && (
           <Stack gap="md">
-            <Card withBorder bg="gray.0" p="md">
+            <Card withBorder radius="md" p="sm" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)', color: 'white' }}>
               <Group justify="space-between">
-                <Badge color="blue" size="lg">{selectedRecommandation.NumeroRecommandation || selectedRecommandation.RecommandationID}</Badge>
-                <Badge color={getNiveauColor(selectedRecommandation.NiveauMiseEnOeuvre)} variant="light">
+                <Badge color="blue" size="lg" variant="white">{selectedRecommandation.NumeroRecommandation || `REC-${selectedRecommandation.RecommandationID}`}</Badge>
+                <Badge color={getNiveauColor(selectedRecommandation.NiveauMiseEnOeuvre)} variant="filled" size="lg">
                   {selectedRecommandation.NiveauMiseEnOeuvre || 'Non commencé'}
                 </Badge>
               </Group>
@@ -1162,39 +966,69 @@ export default function Recommandations() {
 
             <Grid>
               <Grid.Col span={12}>
-                <Text size="xs" c="dimmed">Texte de la recommandation</Text>
-                <Text fw={500}>{selectedRecommandation.TexteRecommandation}</Text>
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed">Rapport</Text>
-                <Text fw={500}>{selectedRecommandation.NumeroRapport} - {selectedRecommandation.LibelleRapport}</Text>
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed">Domaine</Text>
-                <Text fw={500}>{selectedRecommandation.Domaine || '-'}</Text>
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed">Responsable</Text>
-                <Text fw={500}>{selectedRecommandation.ResponsableMiseEnOeuvre || '-'}</Text>
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed">Échéance</Text>
-                <Text size="xs" c="dimmed">Échéance: <strong>{selectedRecommandation.Echeance || 'Non définie'}</strong></Text>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Recommandation</Text>
+                <Text fw={500} size="sm">{selectedRecommandation.TexteRecommandation}</Text>
               </Grid.Col>
               <Grid.Col span={12}>
-                <Text size="xs" c="dimmed">Problème identifié</Text>
-                <Text fw={500}>{selectedRecommandation.ProblemeFaiblesse || '-'}</Text>
+                <Paper p="sm" bg="blue.0" radius="md">
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Rapport associé</Text>
+                  <Text fw={500} size="sm">{selectedRecommandation.NumeroRapport} - {selectedRecommandation.LibelleRapport}</Text>
+                </Paper>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Domaine</Text>
+                <Badge color="blue" variant="light">{selectedRecommandation.Domaine || '-'}</Badge>
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Échéance</Text>
+                <Text fw={500} size="sm">{selectedRecommandation.Echeance || '-'}</Text>
               </Grid.Col>
               <Grid.Col span={12}>
-                <Text size="xs" c="dimmed">Acteurs impliqués</Text>
-                <Text fw={500}>{selectedRecommandation.ActeursImpliques || '-'}</Text>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Responsable</Text>
+                <Text fw={500} size="sm">{selectedRecommandation.ResponsableMiseEnOeuvre || '-'}</Text>
               </Grid.Col>
+              {selectedRecommandation.ProblemeFaiblesse && (
+                <Grid.Col span={12}>
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Problème identifié</Text>
+                  <Text size="sm">{selectedRecommandation.ProblemeFaiblesse}</Text>
+                </Grid.Col>
+              )}
+              {selectedRecommandation.ActeursImpliques && (
+                <Grid.Col span={12}>
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Acteurs impliqués</Text>
+                  <Text size="sm">{selectedRecommandation.ActeursImpliques}</Text>
+                </Grid.Col>
+              )}
             </Grid>
 
             <Divider />
-            <Group justify="center">
-              <Badge variant="light" color="blue">ID: {selectedRecommandation.RecommandationID}</Badge>
-              <Badge variant="light" color="gray">Créée le {dayjs().format('DD/MM/YYYY')}</Badge>
+            <Group justify="flex-end">
+              <Button variant="subtle" onClick={() => setViewModalOpen(false)}>Fermer</Button>
+              <Button
+                variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}
+                leftSection={<IconEdit size={16} />}
+                onClick={() => {
+                  setViewModalOpen(false);
+                  setEditingId(selectedRecommandation.RecommandationID);
+                  setCurrentDomaineInput(selectedRecommandation.Domaine || '');
+                  form.setValues({
+                    Services: selectedRecommandation.Services || '',
+                    Source: selectedRecommandation.Source || '',
+                    RapportID: selectedRecommandation.RapportID?.toString() || '',
+                    ProblemeFaiblesse: selectedRecommandation.ProblemeFaiblesse || '',
+                    NumeroRecommandation: selectedRecommandation.NumeroRecommandation || '',
+                    TexteRecommandation: selectedRecommandation.TexteRecommandation || '',
+                    ResponsableMiseEnOeuvre: selectedRecommandation.ResponsableMiseEnOeuvre || '',
+                    ActeursImpliques: selectedRecommandation.ActeursImpliques || '',
+                    InstanceValidation: selectedRecommandation.InstanceValidation || '',
+                    Echeance: selectedRecommandation.Echeance || '',
+                    Domaine: selectedRecommandation.Domaine || '',
+                  });
+                  setModalOpen(true);
+                }}
+              >
+                Modifier
+              </Button>
             </Group>
           </Stack>
         )}
@@ -1204,16 +1038,9 @@ export default function Recommandations() {
       <Modal
         opened={deleteModalOpen}
         onClose={() => { setDeleteModalOpen(false); setRecommandationToDelete(null); }}
-        title={
-          <Group gap="sm">
-            <IconTrash size={20} color="red" />
-            <Text fw={700} size="lg">Confirmation de suppression</Text>
-          </Group>
-        }
+        title={<Text fw={600} size="md">Confirmation de suppression</Text>}
         size="sm"
         centered
-        overlayProps={{ blur: 3 }}
-        transitionProps={{ transition: 'fade', duration: 200 }}
       >
         <Stack gap="md">
           <Alert color="red" variant="light" icon={<IconInfoCircle size={16} />}>
@@ -1231,16 +1058,9 @@ export default function Recommandations() {
       <Modal
         opened={infoModalOpen}
         onClose={() => setInfoModalOpen(false)}
-        title={
-          <Group gap="sm">
-            <IconInfoCircle size={20} color="#1b365d" />
-            <Text fw={700} size="lg">Instructions</Text>
-          </Group>
-        }
+        title={<Text fw={600} size="md">Instructions</Text>}
         size="md"
         centered
-        overlayProps={{ blur: 3 }}
-        transitionProps={{ transition: 'fade', duration: 200 }}
       >
         <Stack gap="md">
           <Paper p="md" radius="md" withBorder bg="blue.0">
@@ -1249,8 +1069,9 @@ export default function Recommandations() {
               <Text size="sm">1️⃣ Renseignez le texte et le numéro de la recommandation</Text>
               <Text size="sm">2️⃣ Liez la recommandation à un rapport d'inspection</Text>
               <Text size="sm">3️⃣ Définissez un responsable et une date d'échéance</Text>
-              <Text size="sm">4️⃣ Suivez l'avancement via l'onglet Suivi</Text>
-              <Text size="sm">5️⃣ Exportez la liste au format Excel, PDF ou Word</Text>
+              <Text size="sm">4️⃣ Pour ajouter un nouveau domaine, saisissez-le et cliquez sur "Ajouter"</Text>
+              <Text size="sm">5️⃣ Suivez l'avancement via l'onglet Suivi</Text>
+              <Text size="sm">6️⃣ Exportez la liste au format Excel, PDF ou Word</Text>
             </Stack>
           </Paper>
           <Divider />
