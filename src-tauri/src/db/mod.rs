@@ -90,18 +90,7 @@ pub fn init_db() -> Result<Connection> {
             ReferenceJustificatif TEXT,
             FOREIGN KEY (RecommandationID) REFERENCES Recommandation(RecommandationID)
         );
-        
-        -- Table Document
-        CREATE TABLE IF NOT EXISTS Document (
-            DocumentID INTEGER PRIMARY KEY AUTOINCREMENT,
-            NomFichier TEXT NOT NULL,
-            Fichier TEXT,
-            TypeDocument TEXT,
-            RapportID INTEGER,
-            SuiviID INTEGER,
-            FOREIGN KEY (RapportID) REFERENCES Rapport(RapportID),
-            FOREIGN KEY (SuiviID) REFERENCES SuiviRecommandation(SuiviID)
-        );
+
         
         -- Index pour les performances
         CREATE INDEX IF NOT EXISTS idx_dossier_personnel ON Dossier(PersonnelID);

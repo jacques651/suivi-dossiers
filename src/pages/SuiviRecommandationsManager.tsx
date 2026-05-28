@@ -1,18 +1,17 @@
 // src/components/SuiviRecommandationsManager.tsx
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Container, Stack, Card, Title, Text, Group, Button, Modal,
+  Box, Container, Stack, Card, Text, Group, Button, Modal,
   TextInput, Textarea, Select, Badge, ActionIcon, Tooltip, Divider,
-  ScrollArea, Table, Pagination, Avatar, Center, LoadingOverlay,
+  ScrollArea, Table, Pagination, Center, LoadingOverlay,
   Paper, Grid, Menu,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
-  IconChecklist, IconEdit, IconEye, IconSearch, IconRefresh,
+  IconEdit, IconEye, IconSearch, IconRefresh,
   IconInfoCircle, IconDeviceFloppy, 
   IconDownload, IconFileExcel,
   IconPrinter
-  ,
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
@@ -21,6 +20,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { usePrint } from '../hooks/usePrint';
 import SuiviRecommandationStatCards from './SuiviRecommandationStatCards';
+import PageHeader from '../components/PageHeader';
 
 export interface SuiviRecommandation {
   SuiviID: number;
@@ -49,7 +49,6 @@ const SuiviRecommandationsManager: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSuivi, setSelectedSuivi] = useState<SuiviRecommandation | null>(null);
   const [editingSuivi, setEditingSuivi] = useState<SuiviRecommandation | null>(null);
-  const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [infoModalOpen, setInfoModalOpen] = useState(false);
   const itemsPerPage = 10;
@@ -110,14 +109,13 @@ const SuiviRecommandationsManager: React.FC = () => {
     if (!formData.RecommandationID) {
       notifications.show({ title: 'Erreur', message: 'Recommandation requise', color: 'red' }); return;
     }
-    setSaving(true);
     try {
       await invoke('update_suivi_recommandation', { suivi: formData });
       notifications.show({ title: 'Succès', message: 'Suivi enregistré', color: 'green' });
       closeModal(); resetForm(); loadSuivis();
     } catch (err: any) {
       notifications.show({ title: 'Erreur', message: String(err), color: 'red' });
-    } finally { setSaving(false); }
+    }
   };
 
   const getNiveauColor = (niveau?: string) => {
@@ -143,9 +141,13 @@ const SuiviRecommandationsManager: React.FC = () => {
   const exportExcel = async () => {
     setExporting(true);
     const data = filtered.map(s => ({
-      'N° Reco': s.NumeroRecommandation || '', 'Recommandation': s.TexteRecommandation || '',
-      'Niveau': s.NiveauMiseEnOeuvre || '', 'Début': s.DateDebut || '', 'Fin': s.DateFin || '',
-      'Mesures': s.MesuresCorrectives || '', 'Appréciation': s.AppreciationControle || '',
+      'N° Reco': s.NumeroRecommandation || '',
+      'Recommandation': s.TexteRecommandation || '',
+      'Niveau': s.NiveauMiseEnOeuvre || '',
+      'Début': s.DateDebut || '',
+      'Fin': s.DateFin || '',
+      'Mesures': s.MesuresCorrectives || '',
+      'Appréciation': s.AppreciationControle || '',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Suivis');
@@ -160,7 +162,6 @@ const SuiviRecommandationsManager: React.FC = () => {
   }
 
   const handlePrint = (orientation: 'portrait' | 'landscape') => {
-
     const rows = filtered.map((s, i) => `
     <tr>
       <td>${i + 1}</td>
@@ -172,7 +173,7 @@ const SuiviRecommandationsManager: React.FC = () => {
       <td>${s.MesuresCorrectives || '-'}</td>
       <td>${s.AppreciationControle || '-'}</td>
     </tr>
-  `).join('');
+    `).join('');
 
     const content = `
     <table style="width:100%; border-collapse: collapse;">
@@ -190,40 +191,84 @@ const SuiviRecommandationsManager: React.FC = () => {
       </thead>
       <tbody>${rows}</tbody>
     </table>
-  `;
-
+    `;
     printDocument(content, 'SUIVI DES RECOMMANDATIONS', orientation);
   };
+
   return (
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header */}
-          <Card withBorder radius="lg" p="xl" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)' }}>
-            <Group justify="space-between">
-              <Group gap="md">
-                <Avatar size={60} radius="md" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}><IconChecklist size={30} color="white" /></Avatar>
-                <Box><Title order={1} c="white" size="h2">Suivi des Recommandations</Title><Text c="gray.3" size="sm">Évaluez la mise en œuvre des recommandations</Text></Box>
-              </Group>
-              <Button variant="light" color="white" leftSection={<IconInfoCircle size={18} />} onClick={() => setInfoModalOpen(true)} radius="md">Instructions</Button>
-            </Group>
-          </Card>
+          {/* Header avec PageHeader */}
+          <PageHeader 
+            title="Suivi des Recommandations"
+            subtitle={`${suivis.length} recommandations suivies • ${suivis.filter(s => s.NiveauMiseEnOeuvre === 'Réalisée').length} réalisées`}
+            rightContent={
+              <Button 
+                variant="light" 
+                color="white" 
+                leftSection={<IconInfoCircle size={18} />} 
+                onClick={() => setInfoModalOpen(true)}
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.15)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                Instructions
+              </Button>
+            }
+          />
 
-          {/* Cartes Statistiques - exactement comme AgentStatsCards */}
+          {/* Cartes Statistiques */}
           <SuiviRecommandationStatCards suivis={suivis} />
 
-          {/* Barre */}
+          {/* Barre d'actions */}
           <Card withBorder radius="lg" shadow="sm" p="md">
             <Group justify="space-between">
               <Group>
-                <TextInput placeholder="Rechercher..." leftSection={<IconSearch size={16} />} value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
-                <Select placeholder="Filtrer par niveau" data={['Non commencé', 'En cours', 'Réalisée', 'En retard', 'Bloquée']} value={filterNiveau} onChange={setFilterNiveau} clearable />
+                <TextInput 
+                  placeholder="Rechercher..." 
+                  leftSection={<IconSearch size={16} />} 
+                  value={searchTerm} 
+                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
+                />
+                <Select 
+                  placeholder="Filtrer par niveau" 
+                  data={['Non commencé', 'En cours', 'Réalisée', 'En retard', 'Bloquée']} 
+                  value={filterNiveau} 
+                  onChange={setFilterNiveau} 
+                  clearable 
+                />
               </Group>
               <Group>
-                <Menu><Menu.Target><Button leftSection={<IconDownload size={16} />} variant="outline" loading={exporting}>Export</Button></Menu.Target>
-                  <Menu.Dropdown><Menu.Item leftSection={<IconFileExcel size={16} color="green" />} onClick={exportExcel}>Excel</Menu.Item></Menu.Dropdown>
+                <Tooltip label="Actualiser">
+                  <ActionIcon variant="light" onClick={loadSuivis}>
+                    <IconRefresh size={18} />
+                  </ActionIcon>
+                </Tooltip>
+                <Menu shadow="md" width={200} position="bottom-end">
+                  <Menu.Target>
+                    <Button leftSection={<IconDownload size={16} />} variant="outline" loading={exporting}>
+                      Exporter
+                    </Button>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Label>Format d'export</Menu.Label>
+                    <Menu.Item leftSection={<IconFileExcel size={16} color="green" />} onClick={exportExcel}>
+                      Excel (.xlsx)
+                    </Menu.Item>
+                  </Menu.Dropdown>
                 </Menu>
-                <Tooltip label="Actualiser"><ActionIcon variant="light" onClick={loadSuivis}><IconRefresh size={18} /></ActionIcon></Tooltip>
                 <Menu shadow="md" width={160}>
                   <Menu.Target>
                     <Tooltip label="Imprimer">
@@ -232,15 +277,9 @@ const SuiviRecommandationsManager: React.FC = () => {
                       </ActionIcon>
                     </Tooltip>
                   </Menu.Target>
-
                   <Menu.Dropdown>
-                    <Menu.Item onClick={() => handlePrint('portrait')}>
-                      🧾 Portrait
-                    </Menu.Item>
-
-                    <Menu.Item onClick={() => handlePrint('landscape')}>
-                      📄 Paysage
-                    </Menu.Item>
+                    <Menu.Item onClick={() => handlePrint('portrait')}>🧾 Portrait</Menu.Item>
+                    <Menu.Item onClick={() => handlePrint('landscape')}>📄 Paysage</Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
               </Group>
@@ -272,8 +311,16 @@ const SuiviRecommandationsManager: React.FC = () => {
                       <Table.Td><Badge color={s.AppreciationControle === 'Satisfaisant' ? 'green' : s.AppreciationControle === 'Non satisfaisant' ? 'red' : 'orange'} variant="light" size="xs">{s.AppreciationControle || '-'}</Badge></Table.Td>
                       <Table.Td>
                         <Group gap={4}>
-                          <Tooltip label="Voir"><ActionIcon variant="subtle" color="blue" size="sm" onClick={() => { setSelectedSuivi(s); openViewModal(); }}><IconEye size={14} /></ActionIcon></Tooltip>
-                          <Tooltip label="Modifier"><ActionIcon variant="subtle" color="orange" size="sm" onClick={() => openEditModal(s)}><IconEdit size={14} /></ActionIcon></Tooltip>
+                          <Tooltip label="Voir">
+                            <ActionIcon variant="subtle" color="blue" size="sm" onClick={() => { setSelectedSuivi(s); openViewModal(); }}>
+                              <IconEye size={14} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Modifier">
+                            <ActionIcon variant="subtle" color="orange" size="sm" onClick={() => openEditModal(s)}>
+                              <IconEdit size={14} />
+                            </ActionIcon>
+                          </Tooltip>
                         </Group>
                       </Table.Td>
                     </Table.Tr>
@@ -287,21 +334,76 @@ const SuiviRecommandationsManager: React.FC = () => {
           {/* Modal Formulaire */}
           <Modal opened={modalOpened} onClose={closeModal} title={editingSuivi ? 'Modifier le suivi' : 'Nouveau suivi'} size="lg" centered>
             <Stack gap="md">
-              <Select label="Niveau de mise en œuvre" data={['Non commencé', 'En cours', 'Réalisée', 'En retard', 'Bloquée']} value={formData.NiveauMiseEnOeuvre} onChange={(v) => setFormData({ ...formData, NiveauMiseEnOeuvre: v || 'Non commencé' })} />
+              <Select 
+                label="Niveau de mise en œuvre" 
+                data={['Non commencé', 'En cours', 'Réalisée', 'En retard', 'Bloquée']} 
+                value={formData.NiveauMiseEnOeuvre} 
+                onChange={(v) => setFormData({ ...formData, NiveauMiseEnOeuvre: v || 'Non commencé' })} 
+              />
               <Grid>
-                <Grid.Col span={6}><TextInput label="Date début" type="date" value={formData.DateDebut} onChange={(e) => setFormData({ ...formData, DateDebut: e.target.value })} /></Grid.Col>
-                <Grid.Col span={6}><TextInput label="Date fin" type="date" value={formData.DateFin} onChange={(e) => setFormData({ ...formData, DateFin: e.target.value })} /></Grid.Col>
+                <Grid.Col span={6}>
+                  <TextInput 
+                    label="Date début" 
+                    type="date" 
+                    value={formData.DateDebut} 
+                    onChange={(e) => setFormData({ ...formData, DateDebut: e.target.value })} 
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <TextInput 
+                    label="Date fin" 
+                    type="date" 
+                    value={formData.DateFin} 
+                    onChange={(e) => setFormData({ ...formData, DateFin: e.target.value })} 
+                  />
+                </Grid.Col>
               </Grid>
-              <Textarea label="Mesures correctives" value={formData.MesuresCorrectives} onChange={(e) => setFormData({ ...formData, MesuresCorrectives: e.target.value })} minRows={3} />
+              <Textarea 
+                label="Mesures correctives" 
+                value={formData.MesuresCorrectives} 
+                onChange={(e) => setFormData({ ...formData, MesuresCorrectives: e.target.value })} 
+                minRows={3} 
+              />
               <Grid>
-                <Grid.Col span={6}><Textarea label="Observation délai" value={formData.ObservationDelai} onChange={(e) => setFormData({ ...formData, ObservationDelai: e.target.value })} minRows={2} /></Grid.Col>
-                <Grid.Col span={6}><Textarea label="Observation mise en œuvre" value={formData.ObservationMiseEnOeuvre} onChange={(e) => setFormData({ ...formData, ObservationMiseEnOeuvre: e.target.value })} minRows={2} /></Grid.Col>
+                <Grid.Col span={6}>
+                  <Textarea 
+                    label="Observation délai" 
+                    value={formData.ObservationDelai} 
+                    onChange={(e) => setFormData({ ...formData, ObservationDelai: e.target.value })} 
+                    minRows={2} 
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Textarea 
+                    label="Observation mise en œuvre" 
+                    value={formData.ObservationMiseEnOeuvre} 
+                    onChange={(e) => setFormData({ ...formData, ObservationMiseEnOeuvre: e.target.value })} 
+                    minRows={2} 
+                  />
+                </Grid.Col>
               </Grid>
               <Grid>
-                <Grid.Col span={6}><Select label="Appréciation" data={['Satisfaisant', 'Partiellement satisfaisant', 'Non satisfaisant', 'Non évalué']} value={formData.AppreciationControle} onChange={(v) => setFormData({ ...formData, AppreciationControle: v || '' })} clearable /></Grid.Col>
-                <Grid.Col span={6}><TextInput label="Référence justificatif" value={formData.ReferenceJustificatif} onChange={(e) => setFormData({ ...formData, ReferenceJustificatif: e.target.value })} /></Grid.Col>
+                <Grid.Col span={6}>
+                  <Select 
+                    label="Appréciation" 
+                    data={['Satisfaisant', 'Partiellement satisfaisant', 'Non satisfaisant', 'Non évalué']} 
+                    value={formData.AppreciationControle} 
+                    onChange={(v) => setFormData({ ...formData, AppreciationControle: v || '' })} 
+                    clearable 
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <TextInput 
+                    label="Référence justificatif" 
+                    value={formData.ReferenceJustificatif} 
+                    onChange={(e) => setFormData({ ...formData, ReferenceJustificatif: e.target.value })} 
+                  />
+                </Grid.Col>
               </Grid>
-              <Group justify="flex-end"><Button variant="light" onClick={closeModal}>Annuler</Button><Button onClick={handleSave} loading={saving} leftSection={<IconDeviceFloppy size={16} />}>Enregistrer</Button></Group>
+              <Group justify="flex-end">
+                <Button variant="light" onClick={closeModal}>Annuler</Button>
+                <Button onClick={handleSave} leftSection={<IconDeviceFloppy size={16} />}>Enregistrer</Button>
+              </Group>
             </Stack>
           </Modal>
 
@@ -314,13 +416,34 @@ const SuiviRecommandationsManager: React.FC = () => {
                   <Text size="sm">{selectedSuivi.TexteRecommandation}</Text>
                 </Paper>
                 <Grid>
-                  <Grid.Col span={6}><Text size="xs" c="dimmed">Niveau</Text><Badge color={getNiveauColor(selectedSuivi.NiveauMiseEnOeuvre)}>{selectedSuivi.NiveauMiseEnOeuvre}</Badge></Grid.Col>
-                  <Grid.Col span={3}><Text size="xs" c="dimmed">Début</Text><Text size="sm">{selectedSuivi.DateDebut || '-'}</Text></Grid.Col>
-                  <Grid.Col span={3}><Text size="xs" c="dimmed">Fin</Text><Text size="sm">{selectedSuivi.DateFin || '-'}</Text></Grid.Col>
+                  <Grid.Col span={6}>
+                    <Text size="xs" c="dimmed">Niveau</Text>
+                    <Badge color={getNiveauColor(selectedSuivi.NiveauMiseEnOeuvre)}>{selectedSuivi.NiveauMiseEnOeuvre}</Badge>
+                  </Grid.Col>
+                  <Grid.Col span={3}>
+                    <Text size="xs" c="dimmed">Début</Text>
+                    <Text size="sm">{selectedSuivi.DateDebut || '-'}</Text>
+                  </Grid.Col>
+                  <Grid.Col span={3}>
+                    <Text size="xs" c="dimmed">Fin</Text>
+                    <Text size="sm">{selectedSuivi.DateFin || '-'}</Text>
+                  </Grid.Col>
                 </Grid>
-                {selectedSuivi.MesuresCorrectives && <Paper p="md" withBorder><Text size="xs" fw={600}>Mesures</Text><Text size="sm">{selectedSuivi.MesuresCorrectives}</Text></Paper>}
-                {selectedSuivi.AppreciationControle && <Paper p="md" withBorder><Text size="xs" fw={600}>Appréciation</Text><Text size="sm">{selectedSuivi.AppreciationControle}</Text></Paper>}
-                <Group justify="flex-end"><Button variant="light" onClick={closeViewModal}>Fermer</Button></Group>
+                {selectedSuivi.MesuresCorrectives && (
+                  <Paper p="md" withBorder>
+                    <Text size="xs" fw={600}>Mesures</Text>
+                    <Text size="sm">{selectedSuivi.MesuresCorrectives}</Text>
+                  </Paper>
+                )}
+                {selectedSuivi.AppreciationControle && (
+                  <Paper p="md" withBorder>
+                    <Text size="xs" fw={600}>Appréciation</Text>
+                    <Text size="sm">{selectedSuivi.AppreciationControle}</Text>
+                  </Paper>
+                )}
+                <Group justify="flex-end">
+                  <Button variant="light" onClick={closeViewModal}>Fermer</Button>
+                </Group>
               </Stack>
             )}
           </Modal>
@@ -332,7 +455,8 @@ const SuiviRecommandationsManager: React.FC = () => {
               <Text size="sm">2️⃣ Mettez à jour le niveau de mise en œuvre</Text>
               <Text size="sm">3️⃣ Ajoutez les mesures correctives</Text>
               <Text size="sm">4️⃣ Évaluez l'appréciation du contrôle</Text>
-              <Divider /><Text size="xs" c="dimmed" ta="center">Version 1.0.0</Text>
+              <Divider />
+              <Text size="xs" c="dimmed" ta="center">Version 2.0.0 - BD-SDI</Text>
             </Stack>
           </Modal>
         </Stack>

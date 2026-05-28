@@ -1,11 +1,12 @@
 // src/pages/Rapports.tsx
 import { useEffect, useState } from 'react';
 import {
-  Table, Button, Modal, TextInput, Stack, Title, Card,
+  Table, Button, Modal, TextInput, Stack, Card,
   Group, ActionIcon, Select, Textarea, Grid, Badge,
-  Avatar, Text, Divider, Loader, Pagination, Tooltip,
+  Text, Divider, Loader, Pagination, Tooltip,
   Box, Container, Paper, ThemeIcon,
-  ScrollArea, Center, Alert, Menu, Transition
+  ScrollArea, Center, Alert, Menu, Transition,
+  FileInput
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
@@ -15,7 +16,7 @@ import {
   IconRefresh, IconDownload, IconPrinter,
   IconFileExcel, IconFile, IconFileWord,
   IconInfoCircle, IconCheck, IconX,
-  IconReportAnalytics, IconTrendingUp
+  IconTrendingUp
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
@@ -27,6 +28,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { usePrint } from '../hooks/usePrint';
 import RapportStatsCards from './rapports/RapportStatsCards';
+import PageHeader from '../components/PageHeader';
+
 
 interface Rapport {
   RapportID: number;
@@ -35,7 +38,7 @@ interface Rapport {
   DateRapport: string;
   TypeInspection?: string;
   PeriodeSousRevue?: string;
-  Fichier?: string;
+  Fichier?: string | File | null;
 }
 
 export default function Rapports() {
@@ -54,14 +57,21 @@ export default function Rapports() {
   const itemsPerPage = 10;
   const { printDocument } = usePrint();
 
-  const form = useForm({
+  const form = useForm<{
+    LibelleRapport: string;
+    NumeroRapport: string;
+    DateRapport: Date | null;
+    TypeInspection: string;
+    PeriodeSousRevue: string;
+    Fichier: File | string | null;
+  }>({
     initialValues: {
       LibelleRapport: '',
       NumeroRapport: '',
       DateRapport: new Date(),
       TypeInspection: '',
       PeriodeSousRevue: '',
-      Fichier: '',
+      Fichier: null,
     },
     validate: {
       LibelleRapport: (value) => (value ? null : 'Le libellé est requis'),
@@ -91,29 +101,80 @@ export default function Rapports() {
     }
   };
 
+  const [editingRapport, setEditingRapport] = useState<Rapport | null>(null);
+
+
   const handleSubmit = async (values: typeof form.values) => {
     try {
+      let fichierPath = null;
+
+      // CAS 1: Nouveau fichier sélectionné
+      if (values.Fichier instanceof File) {
+        try {
+          const appDataDir = await invoke('get_app_data_dir') as string;
+          const fileName = values.Fichier.name;
+          fichierPath = `${appDataDir}\\${fileName}`;
+
+          const fileToBytes = async (file: File): Promise<Uint8Array> => {
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.readAsArrayBuffer(file);
+              reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+              reader.onerror = (error) => reject(error);
+            });
+          };
+
+          const fileBytes = await fileToBytes(values.Fichier);
+          await invoke('save_rapport_file', {
+            filePath: fichierPath,
+            fileContent: Array.from(fileBytes)
+          });
+        } catch (fileError) {
+          console.error('Erreur sauvegarde:', fileError);
+          notifications.show({
+            title: 'Erreur',
+            message: `Impossible de sauvegarder le fichier: ${fileError}`,
+            color: 'red',
+            icon: <IconX size={16} />
+          });
+          return;
+        }
+      }
+      // CAS 2: Pas de nouveau fichier mais en mode édition - garder l'ancien
+      else if (editingId && (values.Fichier === null || values.Fichier === '')) {
+        // Récupérer le fichier existant depuis selectedRapport
+        fichierPath = selectedRapport?.Fichier || null;
+      }
+      // CAS 3: Valeur string (chemin existant)
+      else if (typeof values.Fichier === 'string') {
+        fichierPath = values.Fichier;
+      }
+
       const rapportData = {
-        ...values,
-        RapportID: editingId,
+        LibelleRapport: values.LibelleRapport,
+        NumeroRapport: values.NumeroRapport,
         DateRapport: dayjs(values.DateRapport).format('YYYY-MM-DD'),
+        TypeInspection: values.TypeInspection,
+        PeriodeSousRevue: values.PeriodeSousRevue,
+        Fichier: fichierPath,
+        RapportID: editingId,
       };
 
       if (editingId) {
         await invoke('update_rapport', { rapport: rapportData });
-        notifications.show({ 
-          title: 'Succès', 
-          message: 'Rapport modifié avec succès', 
-          color: 'green', 
-          icon: <IconCheck size={16} /> 
+        notifications.show({
+          title: 'Succès',
+          message: 'Rapport modifié avec succès',
+          color: 'green',
+          icon: <IconCheck size={16} />
         });
       } else {
         await invoke('create_rapport', { rapport: rapportData });
-        notifications.show({ 
-          title: 'Succès', 
-          message: 'Rapport créé avec succès', 
-          color: 'green', 
-          icon: <IconCheck size={16} /> 
+        notifications.show({
+          title: 'Succès',
+          message: 'Rapport créé avec succès',
+          color: 'green',
+          icon: <IconCheck size={16} />
         });
       }
 
@@ -122,34 +183,36 @@ export default function Rapports() {
       setEditingId(null);
       loadRapports();
     } catch (error) {
-      notifications.show({ 
-        title: 'Erreur', 
-        message: `Erreur: ${error}`, 
-        color: 'red', 
-        icon: <IconX size={16} /> 
+      console.error('Erreur:', error);
+      notifications.show({
+        title: 'Erreur',
+        message: `Erreur: ${error}`,
+        color: 'red',
+        icon: <IconX size={16} />
       });
     }
   };
+
 
   const handleDelete = async () => {
     if (!rapportToDelete) return;
     try {
       await invoke('delete_rapport', { id: rapportToDelete });
-      notifications.show({ 
-        title: 'Succès', 
-        message: 'Rapport supprimé avec succès', 
-        color: 'green', 
-        icon: <IconCheck size={16} /> 
+      notifications.show({
+        title: 'Succès',
+        message: 'Rapport supprimé avec succès',
+        color: 'green',
+        icon: <IconCheck size={16} />
       });
       setDeleteModalOpen(false);
       setRapportToDelete(null);
       loadRapports();
     } catch (error) {
-      notifications.show({ 
-        title: 'Erreur', 
-        message: 'Impossible de supprimer le rapport', 
-        color: 'red', 
-        icon: <IconX size={16} /> 
+      notifications.show({
+        title: 'Erreur',
+        message: 'Impossible de supprimer le rapport',
+        color: 'red',
+        icon: <IconX size={16} />
       });
     }
   };
@@ -193,18 +256,18 @@ export default function Rapports() {
       XLSX.utils.book_append_sheet(wb, ws, 'Rapports');
       const excelBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
       await writeFile(filePath, new Uint8Array(excelBuffer));
-      notifications.show({ 
-        title: 'Succès', 
-        message: 'Export Excel réussi !', 
-        color: 'green', 
-        icon: <IconCheck size={16} /> 
+      notifications.show({
+        title: 'Succès',
+        message: 'Export Excel réussi !',
+        color: 'green',
+        icon: <IconCheck size={16} />
       });
     } catch (error) {
-      notifications.show({ 
-        title: 'Erreur', 
-        message: 'Erreur lors de l\'export Excel', 
-        color: 'red', 
-        icon: <IconX size={16} /> 
+      notifications.show({
+        title: 'Erreur',
+        message: 'Erreur lors de l\'export Excel',
+        color: 'red',
+        icon: <IconX size={16} />
       });
     } finally {
       setExporting(false);
@@ -246,18 +309,18 @@ export default function Rapports() {
       });
 
       await writeFile(filePath, new Uint8Array(doc.output('arraybuffer')));
-      notifications.show({ 
-        title: 'Succès', 
-        message: 'Export PDF réussi !', 
-        color: 'green', 
-        icon: <IconCheck size={16} /> 
+      notifications.show({
+        title: 'Succès',
+        message: 'Export PDF réussi !',
+        color: 'green',
+        icon: <IconCheck size={16} />
       });
     } catch (error) {
-      notifications.show({ 
-        title: 'Erreur', 
-        message: 'Erreur lors de l\'export PDF', 
-        color: 'red', 
-        icon: <IconX size={16} /> 
+      notifications.show({
+        title: 'Erreur',
+        message: 'Erreur lors de l\'export PDF',
+        color: 'red',
+        icon: <IconX size={16} />
       });
     } finally {
       setExporting(false);
@@ -307,18 +370,18 @@ export default function Rapports() {
       </html>`;
 
       await writeFile(filePath, new TextEncoder().encode(htmlContent));
-      notifications.show({ 
-        title: 'Succès', 
-        message: 'Export Word réussi !', 
-        color: 'green', 
-        icon: <IconCheck size={16} /> 
+      notifications.show({
+        title: 'Succès',
+        message: 'Export Word réussi !',
+        color: 'green',
+        icon: <IconCheck size={16} />
       });
     } catch (error) {
-      notifications.show({ 
-        title: 'Erreur', 
-        message: 'Erreur lors de l\'export Word', 
-        color: 'red', 
-        icon: <IconX size={16} /> 
+      notifications.show({
+        title: 'Erreur',
+        message: 'Erreur lors de l\'export Word',
+        color: 'red',
+        icon: <IconX size={16} />
       });
     } finally {
       setExporting(false);
@@ -399,149 +462,107 @@ export default function Rapports() {
     <Box style={{ background: '#f8f9fa', minHeight: '100vh' }} p="md">
       <Container size="full" fluid>
         <Stack gap="xl">
-          {/* En-tête - exactement comme AgentManager */}
-          <Transition mounted={true} transition="fade" duration={600}>
-            {(styles) => (
-              <Card 
-                withBorder 
-                radius="xl" 
-                p="xl" 
-                style={{ 
-                  ...styles,
-                  background: 'linear-gradient(135deg, #1b365d 0%, #295080 100%)',
-                  boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'
-                }}
-              >
-                <Group justify="space-between" align="center">
-                  <Group gap="lg">
-                    <Avatar 
-                      size={60} 
-                      radius="xl" 
-                      style={{ 
-                        background: 'linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.1))'
-                      }}
-                    >
-                      <IconReportAnalytics size={28} color="white" />
-                    </Avatar>
-                    <Box>
-                      <Title order={1} c="white" fw={800} size="h2">
-                        Gestion des Rapports d'Inspection
-                      </Title>
-                      <Group gap="xs" mt={5}>
-                        <Badge size="lg" variant="light" color="white" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                          <Group gap="xs">
-                            <IconFileText size={14} />
-                            <Text size="sm">{totalRapports} rapports</Text>
-                          </Group>
-                        </Badge>
-                        <Badge size="lg" variant="light" color="white" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                          <Group gap="xs">
-                            <IconCategory size={14} />
-                            <Text size="sm">{typeCount} types</Text>
-                          </Group>
-                        </Badge>
-                      </Group>
-                    </Box>
-                  </Group>
-                  
-                  <Group gap="md">
-                    <Button 
-                      variant="light" 
-                      color="white" 
-                      leftSection={<IconRefresh size={18} />}
-                      onClick={loadRapports}
-                      style={{ 
+          {/* En-tête avec PageHeader */}
+          <PageHeader
+            title="Gestion des Rapports d'Inspection"
+            subtitle={`${totalRapports} rapports • ${typeCount} types d'inspection`}
+            rightContent={
+              <Group gap="md">
+                <Button
+                  variant="light"
+                  color="white"
+                  leftSection={<IconRefresh size={18} />}
+                  onClick={loadRapports}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  }}
+                >
+                  Actualiser
+                </Button>
+
+                <Menu shadow="md" width={200} position="bottom-end">
+                  <Menu.Target>
+                    <Button
+                      variant="light"
+                      color="white"
+                      leftSection={<IconDownload size={18} />}
+                      loading={exporting}
+                      style={{
                         backgroundColor: 'rgba(255,255,255,0.2)',
                         backdropFilter: 'blur(10px)',
                         transition: 'all 0.3s ease'
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
-                      }}
                     >
-                      Actualiser
+                      Exporter
                     </Button>
-                    
-                    <Menu shadow="md" width={200} position="bottom-end">
-                      <Menu.Target>
-                        <Button 
-                          variant="light" 
-                          color="white" 
-                          leftSection={<IconDownload size={18} />}
-                          loading={exporting}
-                          style={{ 
-                            backgroundColor: 'rgba(255,255,255,0.2)',
-                            backdropFilter: 'blur(10px)',
-                            transition: 'all 0.3s ease'
-                          }}
-                        >
-                          Exporter
-                        </Button>
-                      </Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Label>Format d'export</Menu.Label>
-                        <Menu.Item leftSection={<IconFileExcel size={16} color="#00a84f" />} onClick={exportToExcel}>
-                          Excel (.xlsx)
-                        </Menu.Item>
-                        <Menu.Item leftSection={<IconFile size={16} color="#e74c3c" />} onClick={exportToPDF}>
-                          PDF (.pdf)
-                        </Menu.Item>
-                        <Menu.Item leftSection={<IconFileWord size={16} color="#2980b9" />} onClick={exportToWord}>
-                          Word (.doc)
-                        </Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Label>Format d'export</Menu.Label>
+                    <Menu.Item leftSection={<IconFileExcel size={16} color="#00a84f" />} onClick={exportToExcel}>
+                      Excel (.xlsx)
+                    </Menu.Item>
+                    <Menu.Item leftSection={<IconFile size={16} color="#e74c3c" />} onClick={exportToPDF}>
+                      PDF (.pdf)
+                    </Menu.Item>
+                    <Menu.Item leftSection={<IconFileWord size={16} color="#2980b9" />} onClick={exportToWord}>
+                      Word (.doc)
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
 
-                    <Menu shadow="md" width={200} position="bottom-end">
-                      <Menu.Target>
-                        <Button 
-                          variant="light" 
-                          color="white" 
-                          leftSection={<IconPrinter size={18} />}
-                          style={{ 
-                            backgroundColor: 'rgba(255,255,255,0.2)',
-                            backdropFilter: 'blur(10px)',
-                            transition: 'all 0.3s ease'
-                          }}
-                        >
-                          Imprimer
-                        </Button>
-                      </Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Item onClick={() => handlePrint('portrait')}>Portrait</Menu.Item>
-                        <Menu.Item onClick={() => handlePrint('landscape')}>Paysage</Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
-                    
-                    <Button 
-                      variant="white" 
-                      color="dark" 
-                      leftSection={<IconPlus size={18} />}
-                      onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }}
-                      style={{ 
-                        transition: 'all 0.3s ease',
-                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                <Menu shadow="md" width={200} position="bottom-end">
+                  <Menu.Target>
+                    <Button
+                      variant="light"
+                      color="white"
+                      leftSection={<IconPrinter size={18} />}
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.2)',
+                        backdropFilter: 'blur(10px)',
+                        transition: 'all 0.3s ease'
                       }}
                     >
-                      Nouveau Rapport
+                      Imprimer
                     </Button>
-                  </Group>
-                </Group>
-              </Card>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Item onClick={() => handlePrint('portrait')}>Portrait</Menu.Item>
+                    <Menu.Item onClick={() => handlePrint('landscape')}>Paysage</Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+
+                <Button
+                  variant="white"
+                  color="dark"
+                  leftSection={<IconPlus size={18} />}
+                  onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }}
+                  style={{
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  Nouveau Rapport
+                </Button>
+              </Group>
+            }
+          />
+
+          {/* Statistiques avec design amélioré - exactement comme AgentStatsCards */}
+          <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
+            {(styles) => (
+              <div style={styles}>
+                <RapportStatsCards rapports={rapportsStatsData} />
+              </div>
             )}
           </Transition>
-
-    {/* Statistiques avec design amélioré - exactement comme AgentStatsCards */}
-<Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
-  {(styles) => (
-    <div style={styles}>
-      <RapportStatsCards rapports={rapportsStatsData} />
-    </div>
-  )}
-</Transition>
 
           {/* Filtres - style amélioré */}
           <Transition mounted={true} transition="slide-down" duration={550} timingFunction="ease">
@@ -550,7 +571,7 @@ export default function Rapports() {
                 <Text fw={600} size="lg" mb="md">
                   Filtres
                 </Text>
-                
+
                 <Group grow align="flex-end">
                   <TextInput
                     label="Recherche"
@@ -561,14 +582,14 @@ export default function Rapports() {
                     size="md"
                     radius="md"
                   />
-                  
+
                   <Select
                     label="Type d'inspection"
                     placeholder="Tous les types"
                     leftSection={<IconCategory size={16} />}
                     data={typeOptions}
                     value={null}
-                    onChange={() => {}}
+                    onChange={() => { }}
                     clearable
                     size="md"
                     radius="md"
@@ -592,9 +613,9 @@ export default function Rapports() {
                         {filteredRapports.length} rapport{filteredRapports.length !== 1 ? 's' : ''} trouvé{filteredRapports.length !== 1 ? 's' : ''}
                       </Text>
                     </Group>
-                    <Button 
-                      variant="subtle" 
-                      size="xs" 
+                    <Button
+                      variant="subtle"
+                      size="xs"
                       onClick={() => setSearchTerm('')}
                     >
                       Effacer la recherche
@@ -628,9 +649,9 @@ export default function Rapports() {
                               <Stack align="center" gap="xs">
                                 <IconFileText size={48} color="gray" />
                                 <Text c="dimmed" size="lg">Aucun rapport trouvé</Text>
-                                <Button 
-                                  variant="light" 
-                                  size="sm" 
+                                <Button
+                                  variant="light"
+                                  size="sm"
                                   onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }}
                                 >
                                   Créer un rapport
@@ -663,9 +684,9 @@ export default function Rapports() {
                             </Table.Td>
                             <Table.Td>
                               {rapport.TypeInspection ? (
-                                <Badge 
-                                  color={getTypeColor(rapport.TypeInspection)} 
-                                  variant="light" 
+                                <Badge
+                                  color={getTypeColor(rapport.TypeInspection)}
+                                  variant="light"
                                   size="md"
                                 >
                                   {rapport.TypeInspection}
@@ -677,10 +698,10 @@ export default function Rapports() {
                             <Table.Td ta="center">
                               <Group gap="xs" justify="center" wrap="nowrap">
                                 <Tooltip label="Voir détails" withArrow>
-                                  <ActionIcon 
-                                    onClick={() => handleView(rapport)} 
-                                    color="green" 
-                                    variant="light" 
+                                  <ActionIcon
+                                    onClick={() => handleView(rapport)}
+                                    color="green"
+                                    variant="light"
                                     size="md"
                                     style={{ transition: 'all 0.3s ease' }}
                                     onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
@@ -690,34 +711,33 @@ export default function Rapports() {
                                   </ActionIcon>
                                 </Tooltip>
                                 <Tooltip label="Modifier" withArrow>
-                                  <ActionIcon 
+                                  <ActionIcon
                                     onClick={() => {
                                       setEditingId(rapport.RapportID);
+                                      setEditingRapport(rapport); // ← Stocker le rapport complet
                                       form.setValues({
                                         LibelleRapport: rapport.LibelleRapport,
                                         NumeroRapport: rapport.NumeroRapport,
                                         DateRapport: new Date(rapport.DateRapport),
                                         TypeInspection: rapport.TypeInspection || '',
                                         PeriodeSousRevue: rapport.PeriodeSousRevue || '',
-                                        Fichier: rapport.Fichier || '',
+                                        Fichier: null, // FileInput ne peut pas être pré-rempli avec un chemin
                                       });
                                       setModalOpen(true);
-                                    }} 
-                                    color="blue" 
-                                    variant="light" 
+                                    }}
+                                    color="blue"
+                                    variant="light"
                                     size="md"
-                                    style={{ transition: 'all 0.3s ease' }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
                                   >
                                     <IconEdit size={18} />
                                   </ActionIcon>
                                 </Tooltip>
+
                                 <Tooltip label="Supprimer" withArrow>
-                                  <ActionIcon 
-                                    onClick={() => { setRapportToDelete(rapport.RapportID); setDeleteModalOpen(true); }} 
-                                    color="red" 
-                                    variant="light" 
+                                  <ActionIcon
+                                    onClick={() => { setRapportToDelete(rapport.RapportID); setDeleteModalOpen(true); }}
+                                    color="red"
+                                    variant="light"
                                     size="md"
                                     style={{ transition: 'all 0.3s ease' }}
                                     onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
@@ -741,11 +761,11 @@ export default function Rapports() {
           {/* Pagination */}
           {totalPages > 1 && (
             <Group justify="center" mt="md">
-              <Pagination 
-                total={totalPages} 
-                value={activePage} 
-                onChange={setActivePage} 
-                color="#1b365d" 
+              <Pagination
+                total={totalPages}
+                value={activePage}
+                onChange={setActivePage}
+                color="#1b365d"
                 size="md"
                 radius="md"
               />
@@ -815,6 +835,57 @@ export default function Rapports() {
               size="md"
               radius="md"
             />
+
+            {/* Champ Fichier */}
+            <FileInput
+              label="Fichier du rapport"
+              placeholder="Sélectionner un fichier"
+              {...form.getInputProps('Fichier')}
+              accept=".pdf,.doc,.docx,.txt"
+              size="md"
+              radius="md"
+              clearable
+            />
+
+            {/* Afficher le fichier existant en mode édition */}
+            {editingId && editingRapport?.Fichier && !form.values.Fichier && (
+              <Alert
+                icon={<IconFile size={16} />}
+                color="blue"
+                variant="light"
+                radius="md"
+              >
+                <Group justify="space-between">
+                  <div>
+                    <Text size="xs" c="dimmed">Fichier actuel :</Text>
+                    <Text size="sm" fw={500}>
+                      {/* Vérifier le type avant d'utiliser split */}
+                      {typeof editingRapport.Fichier === 'string'
+                        ? editingRapport.Fichier.split('/').pop()
+                        : editingRapport.Fichier instanceof File
+                          ? editingRapport.Fichier.name
+                          : 'Fichier attaché'}
+                    </Text>
+                  </div>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    onClick={() => {
+                      form.setFieldValue('Fichier', '');
+                      notifications.show({
+                        title: 'Information',
+                        message: 'Le fichier sera remplacé si vous en sélectionnez un nouveau',
+                        color: 'blue',
+                      });
+                    }}
+                  >
+                    Remplacer
+                  </Button>
+                </Group>
+              </Alert>
+            )}
+
             <Group justify="flex-end" mt="md">
               <Button variant="light" onClick={() => setModalOpen(false)} radius="md">Annuler</Button>
               <Button type="submit" variant="gradient" gradient={{ from: '#1b365d', to: '#295080' }} radius="md">
@@ -880,6 +951,40 @@ export default function Rapports() {
               <Grid.Col span={12}>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Période sous revue</Text>
                 <Text fw={500}>{selectedRapport.PeriodeSousRevue || '-'}</Text>
+              </Grid.Col>
+
+              {/* Champ Fichier - Version corrigée */}
+              <Grid.Col span={12}>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Fichier</Text>
+                {selectedRapport.Fichier ? (
+                  <Group gap="sm" mt={4}>
+                    <IconFile size={16} color="#1b365d" />
+                    <Button
+                      variant="subtle"
+                      size="compact-sm"
+                      leftSection={<IconFile size={14} />}
+                      onClick={async () => {
+                        try {
+                          // Appeler la commande Tauri pour ouvrir le fichier
+                          await invoke('open_rapport_file', { filePath: selectedRapport.Fichier });
+                        } catch (error) {
+                          notifications.show({
+                            title: 'Erreur',
+                            message: `Impossible d'ouvrir le fichier: ${error}`,
+                            color: 'red',
+                            icon: <IconX size={16} />
+                          });
+                        }
+                      }}
+                    >
+                      {typeof selectedRapport.Fichier === 'string'
+                        ? selectedRapport.Fichier.split('/').pop()
+                        : 'Voir le fichier'}
+                    </Button>
+                  </Group>
+                ) : (
+                  <Text fw={500} c="dimmed">Aucun fichier joint</Text>
+                )}
               </Grid.Col>
             </Grid>
           </Stack>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Table, Button, Modal, TextInput, Stack, Title, Card,
+  Table, Button, Modal, TextInput, Stack, Card,
   Group, ActionIcon, Select, Textarea, Badge, Grid, ComboboxItem,
   Avatar, Text, Divider, Loader, Pagination, Tooltip,
   Box, Container, Paper, 
@@ -18,6 +18,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
 import { usePrint } from '../hooks/usePrint';
 import DossierStatsCards from './DossierStatsCards';
+import PageHeader from '../components/PageHeader';
 
 export interface Dossier {
   Grade: string;
@@ -91,7 +92,7 @@ export default function Dossiers() {
   const { printDocument } = usePrint();
   const suiteReserveeOptions = ['Sanctionné(e)', 'Acquitté(e)', 'Classé sans suite', 'En instance'];
   const typeSanctionOptions = ['Sanction administrative', 'Sanction judiciaire', 'Sanction disciplinaire', 'Aucune'];
-  const etatOptions = ['En cours', 'Suspendu', 'Clôturé'];
+  const etatOptions = ['En cours', 'Suspendu', 'Clôturé', 'Abandonné'];
 
   const sanctionOptions = [
     'Avertissement',
@@ -305,6 +306,7 @@ export default function Dossiers() {
       case 'Clôturé': return 'green';
       case 'En cours': return 'blue';
       case 'Suspendu': return 'orange';
+      case 'Abandonné': return 'gray';
       default: return 'gray';
     }
   };
@@ -444,27 +446,34 @@ export default function Dossiers() {
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header */}
-          <Card withBorder radius="lg" p="xl" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)' }}>
-            <Group justify="space-between" align="center">
-              <Group gap="md">
-                <Avatar size={60} radius="md" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                  <IconGavel size={30} color="white" />
-                </Avatar>
-                <Box>
-                  <Title order={1} c="white" size="h2">Dossiers Disciplinaires</Title>
-                  <Text c="gray.3" size="sm">Gérez les dossiers disciplinaires des agents</Text>
-                  <Group gap="xs" mt={8}>
-                    <Badge size="sm" variant="white" color="blue">Suivi Dossiers v2.0</Badge>
-                    <Badge size="sm" variant="white" color="green">Justice administrative</Badge>
-                  </Group>
-                </Box>
-              </Group>
-              <Button variant="light" color="white" leftSection={<IconInfoCircle size={18} />} onClick={() => setInfoModalOpen(true)} radius="md">
-                Instructions
-              </Button>
-            </Group>
-          </Card>
+         <PageHeader 
+  title="Dossiers Disciplinaires"
+  subtitle="Gérez les dossiers disciplinaires des agents"
+  rightContent={
+    <Button 
+      variant="light" 
+      color="white" 
+      leftSection={<IconInfoCircle size={18} />} 
+      onClick={() => setInfoModalOpen(true)}
+      style={{
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(255,255,255,0.2)',
+        transition: 'all 0.3s ease'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
+        e.currentTarget.style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
+        e.currentTarget.style.transform = 'translateY(0)';
+      }}
+    >
+      Instructions
+    </Button>
+  }
+/>
 
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
             {(styles) => (

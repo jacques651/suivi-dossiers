@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { MantineProvider, AppShell, Box, Text, Burger, Group, LoadingOverlay } from '@mantine/core';
+import { MantineProvider, AppShell, Box, Text, Burger, Group, LoadingOverlay, Image } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { theme } from './theme';
 import { invoke } from '@tauri-apps/api/core';
-import LoginPage from './components/LoginPage'; // Import par défaut
+import LoginPage from './components/LoginPage';
 
 import SuiviRecommandationsManager from './pages/SuiviRecommandationsManager';
 import { 
@@ -155,8 +155,19 @@ function App() {
                 visibleFrom="sm" 
                 size="sm" 
               />
-              <Text size="xl" fw={700} c="white">Suivi Dossiers</Text>
-              <Text size="sm" c="gray.3" visibleFrom="sm">| Suivi des Inspections et Dossiers Disciplinaires</Text>
+              {/* Logo des armoiries du Burkina Faso */}
+              <Image 
+                src="/armoirie.jpeg" 
+                alt="Armoiries du Burkina Faso"
+                w={40}
+                h={40}
+                fit="contain"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
+              <Box>
+                <Text size="xl" fw={700} c="white">Suivi Dossiers</Text>
+                <Text size="xs" c="gray.3" visibleFrom="sm">| Suivi des Inspections et Dossiers Disciplinaires</Text>
+              </Box>
             </Group>
             
             <Group gap="md">

@@ -2,17 +2,18 @@ import { useEffect, useState } from 'react';
 import {
   Grid, Paper, Text, Title, RingProgress, Group, SimpleGrid,
   Card, ThemeIcon, Stack, Divider, Progress, Badge,
-  Center, Avatar, Box, Container, LoadingOverlay, Button
+  Center, Box, Container, LoadingOverlay, Button
 } from '@mantine/core';
 import {
   IconFileText, IconUsers, IconChecklist, IconAlertCircle,
-  IconReport, IconGavel, IconChartBar, IconTrendingUp,
+  IconReport, IconGavel, IconTrendingUp,
   IconCheck, IconClock, IconX, IconBuilding, IconDashboard,
-  IconListCheck, IconPlus, IconEye, IconCategory
+  IconListCheck, IconPlus, IconEye
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import DashboardStatCards from './DashboardStatCards';
 import { notifications } from '@mantine/notifications';
+import PageHeader from '../components/PageHeader';
 
 
 export interface Stats {
@@ -39,27 +40,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   });
   const [loading, setLoading] = useState(true);
 
- useEffect(() => {
-  const loadStats = async () => {
-    try {
-      setLoading(true);
-      const data = await invoke<Stats>('get_statistiques');
-      console.log('Stats chargées:', data); // Pour déboguer
-      setStats(data);
-    } catch (error) {
-      console.error('Erreur chargement stats:', error);
-      notifications.show({
-        title: 'Erreur',
-        message: 'Impossible de charger les statistiques',
-        color: 'red',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  loadStats();
-}, []);
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        const data = await invoke<Stats>('get_statistiques');
+        console.log('Stats chargées:', data);
+        setStats(data);
+      } catch (error) {
+        console.error('Erreur chargement stats:', error);
+        notifications.show({
+          title: 'Erreur',
+          message: 'Impossible de charger les statistiques',
+          color: 'red',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, []);
 
   const totalRecommandations = stats.totalRecommandations || 1;
   const tauxRealisation = (stats.recommandationsRealisees / totalRecommandations) * 100;
@@ -83,28 +84,38 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header */}
-          <Card withBorder radius="lg" p="xl" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)' }}>
-            <Group justify="space-between">
-              <Group gap="md">
-                <Avatar size={60} radius="md" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                  <IconChartBar size={30} color="white" />
-                </Avatar>
-                <Box>
-                  <Title order={1} c="white" size="h2">Tableau de bord</Title>
-                  <Text c="gray.3" size="sm">Vue d'ensemble de l'activité d'inspection</Text>
-                  <Group gap="xs" mt={8}>
-                    <Badge variant="white" color="blue">{new Date().toLocaleDateString('fr-FR')}</Badge>
-                    <Badge variant="white" color="green">Synthèse en temps réel</Badge>
-                  </Group>
-                </Box>
+          <PageHeader
+            title="Tableau de bord de suivi de dossiers d'inconduite"
+            subtitle={`${stats.totalAgents} agents • ${stats.totalDossiers} dossiers • ${stats.totalRecommandations} recommandations • ${new Date().toLocaleDateString('fr-FR')}`}
+            rightContent={
+              <Group gap="sm">
+                <Badge
+                  size="lg"
+                  variant="light"
+                  color={tauxRealisation >= 75 ? "green" : tauxRealisation >= 50 ? "orange" : "red"}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    color: 'white',
+                    padding: '8px 16px'
+                  }}
+                >
+                  {tauxRealisation.toFixed(1)}% de recommandations réalisées
+                </Badge>
+                <Button
+                  variant="light"
+                  color="white"
+                  size="sm"
+                  onClick={() => window.location.reload()}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                >
+                  Actualiser
+                </Button>
               </Group>
-              <Button variant="light" color="white" leftSection={<IconCategory size={18} />} onClick={() => onNavigate?.('referentiels')}>
-                Configuration
-              </Button>
-            </Group>
-          </Card>
-
+            }
+          />
           {/* Cartes Statistiques */}
           <DashboardStatCards stats={stats} onNavigate={onNavigate} />
 

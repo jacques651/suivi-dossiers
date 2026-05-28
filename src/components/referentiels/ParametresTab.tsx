@@ -23,7 +23,7 @@ export function ParametresTab({ parametres, onRefresh }: ParametresTabProps) {
   const [editingItem, setEditingItem] = useState<ParametreGeneral | null>(null);
   const [itemToDelete, setItemToDelete] = useState<ParametreGeneral | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [logoBase64, setLogoBase64] = useState<string>('');
+  const [, setLogoBase64] = useState<string>('');
   const [showPreview, setShowPreview] = useState(false);
   const itemsPerPage = 10;
 

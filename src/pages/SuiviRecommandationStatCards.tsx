@@ -83,14 +83,14 @@ export default function SuiviRecommandationStatCards({ suivis }: Props) {
         </Group>
       </Card>
 
-      {/* Carte 5 - Bloquées */}
+      {/* Carte 5 - Abandonnées */}
       <Card withBorder radius="lg" shadow="sm" p="md" style={{ borderLeft: '4px solid var(--mantine-color-red-6)' }}>
         <Group gap="sm" wrap="nowrap">
           <ThemeIcon size="lg" radius="md" color="red" variant="light">
             <IconX size={20} />
           </ThemeIcon>
           <Box style={{ flex: 1 }}>
-            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Bloquées</Text>
+            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Abandonnées</Text>
             <Text fw={700} size="xl">{bloquees}</Text>
             <Progress value={pourcentageBloquees} size="xs" radius="xl" color="red" mt={4} />
           </Box>

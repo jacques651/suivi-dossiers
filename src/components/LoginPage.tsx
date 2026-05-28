@@ -1,13 +1,13 @@
+// src/components/LoginPage.tsx
 import { useState } from 'react';
 import { Card, TextInput, Button, Stack, Title, Text, Container, Paper, PasswordInput, Alert } from '@mantine/core';
 import { IconUser, IconLock, IconLogin, IconAlertCircle } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 
-// Définir l'interface des props
 interface LoginPageProps {
   onLogin: (email: string, password: string) => Promise<boolean>;
 }
 
-// Utiliser l'interface dans le composant
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,10 +19,25 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true);
     setError('');
     
-    const success = await onLogin(email, password);
-    if (!success) {
-      setError('Email ou mot de passe incorrect');
+    try {
+      // Appeler la fonction onLogin passée par App.tsx
+      const success = await onLogin(email, password);
+      
+      if (success) {
+        notifications.show({
+          title: 'Succès',
+          message: 'Connexion réussie !',
+          color: 'green',
+        });
+        // La redirection est gérée par App.tsx
+      } else {
+        setError('Email ou nom d\'utilisateur ou mot de passe incorrect');
+      }
+    } catch (err) {
+      setError('Erreur de connexion au serveur');
+      console.error(err);
     }
+    
     setLoading(false);
   };
 
@@ -51,7 +66,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 )}
 
                 <TextInput
-                  label="Email"
+                  label="Email ou nom d'utilisateur"
                   placeholder="admin@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.currentTarget.value)}

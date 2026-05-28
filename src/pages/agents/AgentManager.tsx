@@ -1,7 +1,7 @@
 // src/pages/agents/AgentManager.tsx
 import { useEffect, useState, useRef } from 'react';
-import { Stack, Card, Title, Text, Group, Button, Avatar, Box, Container, Center, Loader, ThemeIcon, Badge, Transition, Paper } from '@mantine/core';
-import { IconUsers, IconPlus, IconRefresh, IconUserCheck, IconBuildingCommunity, IconTrendingUp } from '@tabler/icons-react';
+import { Stack, Card, Text, Group, Button, Box, Container, Center, Loader, ThemeIcon, Transition, Paper } from '@mantine/core';
+import { IconPlus, IconRefresh, IconTrendingUp } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
 import AgentDeleteModal from './AgentDeleteModal';
@@ -12,6 +12,7 @@ import AgentImportModal from './AgentImportModal';
 import AgentStatsCards from './AgentStatsCards';
 import AgentTable from './AgentTable';
 import AgentViewModal from './AgentViewModal';
+import PageHeader from '../../components/PageHeader';
 
 // Définition et export des interfaces
 export interface Agent {
@@ -70,7 +71,6 @@ export default function AgentManager() {
       setAgents(data);
       const services = [...new Set(data.map(a => a.Service).filter(Boolean))] as string[];
       setServiceOptions(services);
-      // Plus aucune notification de succès
     } catch (error) {
       notifications.show({
         title: 'Erreur',
@@ -164,97 +164,55 @@ export default function AgentManager() {
     <Box style={{ background: '#f8f9fa', minHeight: '100vh' }} p="md">
       <Container size="full" fluid>
         <Stack gap="xl">
-          {/* En-tête avec design amélioré */}
-          <Transition mounted={true} transition="fade" duration={600}>
-            {(styles) => (
-              <Card
-                withBorder
-                radius="xl"
-                p="xl"
-                style={{
-                  ...styles,
-                  background: 'linear-gradient(135deg, #1b365d 0%, #295080 100%)',
-                  boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'
-                }}
-              >
-                <Group justify="space-between" align="center">
-                  <Group gap="lg">
-                    <Avatar
-                      size={60}
-                      radius="xl"
-                      style={{
-                        background: 'linear-gradient(135deg, #1b365d 0%, #295080 100%)'
-                      }}
-                    >
-                      <IconUsers size={28} color="black" />
-                    </Avatar>
-                    <Box>
-                      <Title order={1} c="white" fw={800} size="h2">
-                        Gestion des Agents
-                      </Title>
-                      <Group gap="xs" mt={5}>
-                        <Badge size="lg" variant="black" color="transparent" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                          <Group gap="xs">
-                            <IconUserCheck size={14} />
-                            <Text size="sm">{agents.length} agents</Text>
-                          </Group>
-                        </Badge>
-                        <Badge size="lg" variant="black" color="transparent" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                          <Group gap="xs">
-                            <IconBuildingCommunity size={14} />
-                            <Text size="sm">{serviceOptions.length} services</Text>
-                          </Group>
-                        </Badge>
-                      </Group>
-                    </Box>
-                  </Group>
+          {/* En-tête avec PageHeader */}
+          <PageHeader 
+            title="Gestion des Agents"
+            subtitle={`${agents.length} agents • ${serviceOptions.length} services`}
+            rightContent={
+              <Group gap="md">
+                <Button
+                  variant="light"
+                  color="white"
+                  leftSection={<IconRefresh size={18} />}
+                  onClick={loadAgents}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                  }}
+                >
+                  Actualiser
+                </Button>
 
-                  <Group gap="md">
-                    <Button
-                      variant="light"
-                      color="white"
-                      leftSection={<IconRefresh size={18} />}
-                      onClick={loadAgents}
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.2)',
-                        backdropFilter: 'blur(10px)',
-                        transition: 'all 0.3s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
-                      }}
-                    >
-                      Actualiser
-                    </Button>
+                <AgentExportMenu
+                  agents={filteredAgents}
+                  grades={grades}
+                  onImport={() => setImportModalOpen(true)}
+                />
 
-                    <AgentExportMenu
-                      agents={filteredAgents}
-                      grades={grades}
-                      onImport={() => setImportModalOpen(true)}
-                    />
+                <Button
+                  variant="white"
+                  color="dark"
+                  leftSection={<IconPlus size={18} />}
+                  onClick={handleAdd}
+                  style={{
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  Nouvel Agent
+                </Button>
+              </Group>
+            }
+          />
 
-                    <Button
-                      variant="white"
-                      color="dark"
-                      leftSection={<IconPlus size={18} />}
-                      onClick={handleAdd}
-                      style={{
-                        transition: 'all 0.3s ease',
-                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                      }}
-                    >
-                      Nouvel Agent
-                    </Button>
-                  </Group>
-                </Group>
-              </Card>
-            )}
-          </Transition>
-
-          {/* Statistiques avec design amélioré */}
+          {/* Statistiques */}
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
             {(styles) => (
               <div style={styles}>
@@ -263,7 +221,7 @@ export default function AgentManager() {
             )}
           </Transition>
 
-          {/* Filtres améliorés */}
+          {/* Filtres */}
           <Transition mounted={true} transition="slide-down" duration={550} timingFunction="ease">
             {(styles) => (
               <div style={styles}>
@@ -314,7 +272,7 @@ export default function AgentManager() {
             </Transition>
           )}
 
-          {/* Tableau avec design amélioré */}
+          {/* Tableau */}
           <Transition mounted={true} transition="fade" duration={600} timingFunction="ease">
             {(styles) => (
               <div ref={printRef} style={styles}>

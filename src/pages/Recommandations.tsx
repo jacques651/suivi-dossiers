@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  Table, Button, Modal, TextInput, Stack, Title, Card,
+  Table, Button, Modal, TextInput, Stack, Card,
   Group, ActionIcon, Select, Textarea, Grid, Badge,
-  Avatar, Text, Divider, Loader, Pagination, Tooltip,
+  Text, Divider, Loader, Pagination, Tooltip,
   Box, Container, Paper,
   ScrollArea, Center, Alert, Menu,
   Autocomplete,
-  Transition} from '@mantine/core';
+  Transition,
+  FileInput
+} from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import {
@@ -25,7 +27,8 @@ import {
   IconInfoCircle,
   IconX,
   IconTrash,
-  IconEye
+  IconEye,
+  IconUpload
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
@@ -37,6 +40,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { usePrint } from '../hooks/usePrint';
 import RecommandationsStatCards from './RecommandationsStatCards';
+import PageHeader from '../components/PageHeader';
+
 
 export interface Recommandation {
   RecommandationID: number;
@@ -60,6 +65,7 @@ export interface Recommandation {
   AppreciationControle?: string;
   NumeroRapport?: string;
   LibelleRapport?: string;
+  FichiersJustificatifs?: string | null; // ✅ CORRECTION : string au lieu de JSX.Element
 }
 
 interface Rapport {
@@ -109,6 +115,8 @@ export default function Recommandations() {
       TexteRecommandation: (value) => (value ? null : 'Le texte de la recommandation est requis'),
     },
   });
+  const [justificatifFile, setJustificatifFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const suiviForm = useForm({
     initialValues: {
@@ -150,20 +158,104 @@ export default function Recommandations() {
     }
   };
 
-const loadDomainesExistants = async () => {
-  try {
-    // Changez 'get_distinct_domaines_from_recommandations' par 'get_distinct_domaines'
-    const domaines = await invoke<string[]>('get_distinct_domaines');
-    if (domaines && domaines.length > 0) {
-      setDomaineOptions(domaines);
-    } else {
+  // Pour sauvegarder un fichier justificatif
+  const saveJustificatif = async (suiviId: number, file: File) => {
+    try {
+      // Obtenir le répertoire de l'application
+      const appDataDir = await invoke('get_app_data_dir') as string;
+      const fileName = `justificatif_${suiviId}_${file.name}`;
+      const filePath = `${appDataDir}\\${fileName}`;
+
+      // Convertir le fichier en bytes
+      const fileToBytes = (file: File): Promise<number[]> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsArrayBuffer(file);
+          reader.onload = () => {
+            const bytes = new Uint8Array(reader.result as ArrayBuffer);
+            resolve(Array.from(bytes));
+          };
+          reader.onerror = (error) => reject(error);
+        });
+      };
+
+      const fileBytes = await fileToBytes(file);
+
+      // Sauvegarder le fichier
+      await invoke('save_rapport_file', {
+        filePath: filePath,
+        fileContent: fileBytes
+      });
+
+      // Mettre à jour la base de données avec le chemin
+      await invoke('update_suivi_recommandation', {
+        suivi: {
+          RecommandationID: suiviId,
+          FichiersJustificatifs: filePath
+        }
+      });
+
+      return filePath;
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde du justificatif:', error);
+      throw error;
+    }
+  };
+  // Fonction pour gérer l'upload
+  const handleUploadJustificatif = async () => {
+    if (!justificatifFile || !selectedRecommandation) return;
+
+    setUploading(true);
+    try {
+      await saveJustificatif(selectedRecommandation.RecommandationID, justificatifFile);
+      notifications.show({
+        title: 'Succès',
+        message: 'Justificatif ajouté avec succès',
+        color: 'green',
+        icon: <IconCheck size={16} />
+      });
+      setJustificatifFile(null);
+      loadRecommandations(); // Recharger pour afficher le nouveau fichier
+    } catch (error) {
+      notifications.show({
+        title: 'Erreur',
+        message: `Erreur lors de l'upload: ${error}`,
+        color: 'red',
+        icon: <IconX size={16} />
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Fonction pour ouvrir un justificatif
+  const openJustificatif = async (filePath: string) => {
+    try {
+      await invoke('open_rapport_file', { filePath });
+    } catch (error) {
+      notifications.show({
+        title: 'Erreur',
+        message: `Impossible d'ouvrir le fichier: ${error}`,
+        color: 'red',
+        icon: <IconX size={16} />
+      });
+    }
+  };
+
+  const loadDomainesExistants = async () => {
+    try {
+      // Changez 'get_distinct_domaines_from_recommandations' par 'get_distinct_domaines'
+      const domaines = await invoke<string[]>('get_distinct_domaines');
+      if (domaines && domaines.length > 0) {
+        setDomaineOptions(domaines);
+      } else {
+        setDomaineOptions([]);
+      }
+    } catch (error) {
+      console.error('Erreur chargement domaines:', error);
       setDomaineOptions([]);
     }
-  } catch (error) {
-    console.error('Erreur chargement domaines:', error);
-    setDomaineOptions([]);
-  }
-};
+  };
   const addNewDomaine = async (nouveauDomaine: string) => {
     if (!nouveauDomaine || nouveauDomaine.trim() === '') return;
 
@@ -521,27 +613,35 @@ const loadDomainesExistants = async () => {
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header */}
-          <Card withBorder radius="lg" p="xl" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)' }}>
-            <Group justify="space-between" align="center">
-              <Group gap="md">
-                <Avatar size={60} radius="md" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                  <IconListCheck size={30} color="white" />
-                </Avatar>
-                <Box>
-                  <Title order={1} c="white" size="h2">Gestion des Recommandations</Title>
-                  <Text c="gray.3" size="sm">Suivez et gérez les recommandations issues des inspections</Text>
-                  <Group gap="xs" mt={8}>
-                    <Badge size="sm" variant="white" color="blue">BD-SDI v2.0</Badge>
-                    <Badge size="sm" variant="white" color="green">Actions correctives</Badge>
-                  </Group>
-                </Box>
-              </Group>
-              <Button variant="light" color="white" leftSection={<IconInfoCircle size={18} />} onClick={() => setInfoModalOpen(true)} radius="md">
-                Instructions
-              </Button>
-            </Group>
-          </Card>
+          {/* En-tête avec PageHeader */}
+<PageHeader 
+  title="Gestion des Recommandations"
+  subtitle={`${recommandations.length} recommandations • Taux de réalisation : ${getTauxRealisation().toFixed(1)}%`}
+  rightContent={
+    <Button 
+      variant="light" 
+      color="white" 
+      leftSection={<IconInfoCircle size={18} />} 
+      onClick={() => setInfoModalOpen(true)}
+      style={{
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(255,255,255,0.2)',
+        transition: 'all 0.3s ease'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
+        e.currentTarget.style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
+        e.currentTarget.style.transform = 'translateY(0)';
+      }}
+    >
+      Instructions
+    </Button>
+  }
+/>
 
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
             {(styles) => (
@@ -697,6 +797,7 @@ const loadDomainesExistants = async () => {
                         <Table.Td style={{ padding: '6px 4px' }}>
                           <Stack gap={2} align="center">
                             <Text size="xs" fw={500}>{rec.Echeance || '-'}</Text>
+                            {rec.Echeance === 'Immédiat' && <Badge color="red" size="xs" variant="filled">Urgent</Badge>}
                             {rec.Echeance === 'Court terme' && <Badge color="red" size="xs" variant="filled">Urgent</Badge>}
                             {rec.Echeance === 'Moyen terme' && <Badge color="orange" size="xs" variant="filled">Intermédiaire</Badge>}
                             {rec.Echeance === 'Long terme' && <Badge color="green" size="xs" variant="filled">Planifié</Badge>}
@@ -847,9 +948,10 @@ const loadDomainesExistants = async () => {
                   label="Échéance"
                   placeholder="Sélectionner le délai"
                   data={[
-                    { value: 'Court terme', label: 'Court terme (≤ 3 mois)' },
-                    { value: 'Moyen terme', label: 'Moyen terme (3-6 mois)' },
-                    { value: 'Long terme', label: 'Long terme (> 6 mois)' }
+                    { value: 'Immédiat', label: 'Immédiat (0-3 mois)' },
+                    { value: 'Court terme', label: 'Court terme (3-6 mois)' },
+                    { value: 'Moyen terme', label: 'Moyen terme (6-12 mois)' },
+                    { value: 'Long terme', label: 'Long terme (> 12 mois)' }
                   ]}
                   {...form.getInputProps('Echeance')}
                   size="md"
@@ -890,7 +992,11 @@ const loadDomainesExistants = async () => {
       {/* Modal Suivi */}
       <Modal
         opened={suiviModalOpen}
-        onClose={() => { setSuiviModalOpen(false); setSelectedRecommandation(null); }}
+        onClose={() => {
+          setSuiviModalOpen(false);
+          setSelectedRecommandation(null);
+          setJustificatifFile(null); // Nettoyer
+        }}
         title={<Text fw={600} size="md">Suivi de la recommandation</Text>}
         size="xl"
         centered
@@ -927,14 +1033,79 @@ const loadDomainesExistants = async () => {
                 </Grid.Col>
               </Grid>
 
-              <Textarea label="Mesures correctives prises" placeholder="Décrire les actions entreprises..." rows={3} {...suiviForm.getInputProps('MesuresCorrectives')} size="md" />
+              {/* Mesures correctives et Justificatifs sur la même ligne */}
+              <Grid>
+                <Grid.Col span={6}>
+                  <Textarea
+                    label="Mesures correctives prises"
+                    placeholder="Décrire les actions entreprises..."
+                    rows={3}
+                    {...suiviForm.getInputProps('MesuresCorrectives')}
+                    size="md"
+                  />
+                </Grid.Col>
+                <Grid.Col span={6}>
+                  <Stack gap="xs">
+                    <Text size="sm" fw={500}>📎 Importer la pièce justificative</Text>
+
+                    {/* Upload de nouveau justificatif */}
+                    <FileInput
+                      placeholder="Sélectionner un fichier (PDF, DOC, JPG, PNG)"
+                      value={justificatifFile}
+                      onChange={setJustificatifFile}
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      size="md"
+                      radius="md"
+                      leftSection={<IconFile size={16} />}
+                      clearable
+                    />
+
+                    {justificatifFile && (
+                      <Button
+                        size="sm"
+                        onClick={handleUploadJustificatif}
+                        loading={uploading}
+                        leftSection={<IconUpload size={16} />}
+                        fullWidth
+                      >
+                        Télécharger la pièce justificative
+                      </Button>
+                    )}
+
+                    {/* Afficher les justificatifs existants */}
+                    {selectedRecommandation.FichiersJustificatifs && (
+                      <Paper withBorder p="sm" radius="md" bg="gray.0" mt="xs">
+                        <Text size="xs" c="dimmed" mb="xs">Justificatif existant :</Text>
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          leftSection={<IconEye size={14} />}
+                          onClick={() => openJustificatif(selectedRecommandation.FichiersJustificatifs as string)}
+                          fullWidth
+                        >
+                          {typeof selectedRecommandation.FichiersJustificatifs === 'string'
+                            ? (() => {
+                              const path = selectedRecommandation.FichiersJustificatifs as string;
+                              const parts = path.split(/[\\/]/);
+                              return parts[parts.length - 1] || 'Voir le justificatif';
+                            })()
+                            : 'Voir le justificatif'}
+                        </Button>
+                      </Paper>
+                    )}
+                  </Stack>
+                </Grid.Col>
+              </Grid>
+
               <Textarea label="Observation sur les délais" placeholder="Respect des délais, retards, etc." rows={2} {...suiviForm.getInputProps('ObservationDelai')} size="md" />
               <Textarea label="Observation sur la mise en œuvre" placeholder="Difficultés rencontrées, succès, etc." rows={2} {...suiviForm.getInputProps('ObservationMiseEnOeuvre')} size="md" />
               <Select label="Appréciation du contrôle" data={['Excellent', 'Bon', 'Satisfaisant', 'Insuffisant', 'Critique']} {...suiviForm.getInputProps('AppreciationControle')} size="md" />
 
-              <Group justify="flex-end">
+              <Group justify="flex-end" mt="md">
                 <Button variant="subtle" onClick={() => setSuiviModalOpen(false)}>Annuler</Button>
-                <Button type="submit">Enregistrer le suivi</Button>
+                <Button type="submit" variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}>
+                  Enregistrer le suivi
+                </Button>
               </Group>
             </Stack>
           </form>

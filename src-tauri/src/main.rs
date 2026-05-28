@@ -1,14 +1,15 @@
-// Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 use rusqlite::{params, Connection, Result};
 use serde_json::Value;
+use std::process::Command as ShellCommand;
 use std::sync::Mutex;
 use tauri::generate_context;
+use tauri::Manager;
 
 struct AppState {
     db: Mutex<Connection>,
 }
+
 fn init_db() -> Result<Connection> {
     // Utiliser le dossier AppData pour stocker la base de données
     let db_path = if cfg!(debug_assertions) {
@@ -30,691 +31,702 @@ fn init_db() -> Result<Connection> {
         format!("{}/suivi_dossiers.db", app_folder)
     };
 
-    println!("Database path: {}", db_path);
+    println!("📁 Database path: {}", db_path);
+
+    // Vérifier si la base existe déjà
+    let db_exists = std::path::Path::new(&db_path).exists();
+
     let conn = Connection::open(db_path)?;
 
-    // SQL sans commentaires avec ===
-    conn.execute_batch(
-        "
-        CREATE TABLE IF NOT EXISTS Agent (
-            PersonnelID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Matricule TEXT UNIQUE NOT NULL,
-            Cle TEXT,
-            Nom TEXT NOT NULL,
-            Prenom TEXT NOT NULL,
-            GradeID INTEGER,
-            Service TEXT,
-            Entite TEXT,
-            Sexe TEXT,
-            Photo TEXT
-        );
-        
-        CREATE TABLE IF NOT EXISTS Rapport (
-            RapportID INTEGER PRIMARY KEY AUTOINCREMENT,
-            LibelleRapport TEXT NOT NULL,
-            NumeroRapport TEXT UNIQUE NOT NULL,
-            DateRapport DATE NOT NULL,
-            TypeInspection TEXT,
-            PeriodeSousRevue TEXT,
-            Fichier TEXT
-        );
-        
-        CREATE TABLE IF NOT EXISTS Dossier (
-            DossierID INTEGER PRIMARY KEY AUTOINCREMENT,
-            PersonnelID INTEGER NOT NULL,
-            TypeInconduite TEXT,
-            PeriodeInconduite TEXT,
-            Annee INTEGER,
-            ServiceInvestigation TEXT,
-            Etat TEXT DEFAULT 'En cours',
-            SuiteReservee TEXT,
-            TypeSanction TEXT,
-            Sanction TEXT,
-            ActeSanction TEXT,
-            NumeroActeSanction TEXT,
-            AutoriteSanction TEXT,
-            Observations TEXT,
-            IDRapport INTEGER,
-            FOREIGN KEY (PersonnelID) REFERENCES Agent(PersonnelID) ON DELETE CASCADE,
-            FOREIGN KEY (IDRapport) REFERENCES Rapport(RapportID) ON DELETE SET NULL
-        );
-        
-        CREATE TABLE IF NOT EXISTS Recommandation (
-            RecommandationID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Services TEXT,
-            Source TEXT,
-            RapportID INTEGER NOT NULL,
-            ProblemeFaiblesse TEXT,
-            NumeroRecommandation TEXT,
-            TexteRecommandation TEXT NOT NULL,
-            ResponsableMiseEnOeuvre TEXT,
-            ActeursImpliques TEXT,
-            InstanceValidation TEXT,
-            Echeance TEXT,
-            Domaine TEXT,
-            FOREIGN KEY (RapportID) REFERENCES Rapport(RapportID) ON DELETE CASCADE
-        );
-        
-        CREATE TABLE IF NOT EXISTS SuiviRecommandation (
-            SuiviID INTEGER PRIMARY KEY AUTOINCREMENT,
-            RecommandationID INTEGER NOT NULL,
-            MesuresCorrectives TEXT,
-            DateDebut TEXT,
-            DateFin TEXT,
-            NiveauMiseEnOeuvre TEXT DEFAULT 'Non commencé',
-            ObservationDelai TEXT,
-            ObservationMiseEnOeuvre TEXT,
-            AppreciationControle TEXT,
-            ReferenceJustificatif TEXT,
-            FOREIGN KEY (RecommandationID) REFERENCES Recommandation(RecommandationID) ON DELETE CASCADE
-        );
-        
-        CREATE TABLE IF NOT EXISTS Document (
-            DocumentID INTEGER PRIMARY KEY AUTOINCREMENT,
-            NomFichier TEXT NOT NULL,
-            Fichier TEXT,
-            TypeDocument TEXT,
-            RapportID INTEGER,
-            SuiviID INTEGER,
-            FOREIGN KEY (RapportID) REFERENCES Rapport(RapportID) ON DELETE CASCADE,
-            FOREIGN KEY (SuiviID) REFERENCES SuiviRecommandation(SuiviID) ON DELETE CASCADE
-        );
-        
-        CREATE TABLE IF NOT EXISTS Grade (
-            GradeID INTEGER PRIMARY KEY AUTOINCREMENT,
-            LibelleGrade TEXT NOT NULL UNIQUE,
-            Ordre INTEGER
-        );
-        
-        CREATE TABLE IF NOT EXISTS Sanction (
-            SanctionID INTEGER PRIMARY KEY AUTOINCREMENT,
-            LibelleSanction TEXT NOT NULL UNIQUE,
-            Categorie TEXT,
-            Niveau INTEGER
-        );
-        
-        CREATE TABLE IF NOT EXISTS ServiceInvestigation (
-            ServiceID INTEGER PRIMARY KEY AUTOINCREMENT,
-            LibelleService TEXT NOT NULL UNIQUE,
-            Acronyme TEXT,
-            Ordre INTEGER,
-            Actif INTEGER DEFAULT 1
-        );
-                
-        CREATE TABLE IF NOT EXISTS Signataire (
-            SignataireID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Nom TEXT NOT NULL,
-            Prenom TEXT NOT NULL,
-            Grade TEXT,
-            Fonction TEXT NOT NULL,
-            TitreHonorifique TEXT,
-            Statut INTEGER DEFAULT 1,
-            Ordre INTEGER,
-            CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(Nom, Prenom, Fonction) 
-        );
-        
-        CREATE TABLE IF NOT EXISTS ParametresGeneraux (
-            ParametreID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Code TEXT UNIQUE NOT NULL,
-            Valeur TEXT,
-            Description TEXT,
-            UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UpdatedBy TEXT
-        );
-        
-        CREATE TABLE IF NOT EXISTS EnteteDocument (
-            EnteteID INTEGER PRIMARY KEY AUTOINCREMENT,
-            TypeDocument TEXT NOT NULL,
-            Champ TEXT NOT NULL,
-            Valeur TEXT,
-            Ordre INTEGER DEFAULT 0,
-            Actif INTEGER DEFAULT 1,
-            Style TEXT,
-            CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(TypeDocument, Champ)
-        );
-        
-        CREATE TABLE IF NOT EXISTS HistoriqueDocuments (
-            HistoriqueID INTEGER PRIMARY KEY AUTOINCREMENT,
-            TypeDocument TEXT NOT NULL,
-            Reference TEXT NOT NULL,
-            Objet TEXT,
-            Expediteur TEXT,
-            Destinataire TEXT,
-            SignataireID INTEGER,
-            DateEmission DATETIME DEFAULT CURRENT_TIMESTAMP,
-            Contenu TEXT,
-            FichierPath TEXT,
-            Statut TEXT DEFAULT 'Généré',
-            CreatedBy TEXT,
-            CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (SignataireID) REFERENCES Signataire(SignataireID)
-        );
-        
-        CREATE TABLE IF NOT EXISTS HistoriqueRecherches (
-            RechercheID INTEGER PRIMARY KEY AUTOINCREMENT,
-            TypeRecherche TEXT,
-            Valeur TEXT,
-            ResultatsCount INTEGER,
-            DateRecherche DATETIME DEFAULT CURRENT_TIMESTAMP,
-            Utilisateur TEXT
-        );
-        
-        CREATE TABLE IF NOT EXISTS Logs (
-            LogID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Utilisateur TEXT NOT NULL,
-            Action TEXT NOT NULL,
-            TableConcernee TEXT NOT NULL,
-            EnregistrementID INTEGER,
-            AnciennesValeurs TEXT,
-            NouvellesValeurs TEXT,
-            AdresseIP TEXT,
-            SessionID TEXT,
-            Details TEXT,
-            DateLog DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        -- ==================== TABLES D'AUTHENTIFICATION ====================
-        
-        CREATE TABLE IF NOT EXISTS Utilisateur (
-            UtilisateurID INTEGER PRIMARY KEY AUTOINCREMENT,
-            NomUtilisateur TEXT UNIQUE NOT NULL,
-            Email TEXT UNIQUE NOT NULL,
-            MotDePasse TEXT NOT NULL,
-            Nom TEXT,
-            Prenom TEXT,
-            Role TEXT DEFAULT 'user',
-            Statut INTEGER DEFAULT 1,
-            TentativesConnexion INTEGER DEFAULT 0,
-            DerniereConnexion DATETIME,
-            DateCreation DATETIME DEFAULT CURRENT_TIMESTAMP,
-            DateModification DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE TABLE IF NOT EXISTS Session (
-            SessionID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Token TEXT UNIQUE NOT NULL,
-            UtilisateurID INTEGER NOT NULL,
-            DateCreation DATETIME DEFAULT CURRENT_TIMESTAMP,
-            DateExpiration DATETIME,
-            AdresseIP TEXT,
-            Actif INTEGER DEFAULT 1,
-            FOREIGN KEY (UtilisateurID) REFERENCES Utilisateur(UtilisateurID) ON DELETE CASCADE
-        );
-        
-        CREATE TABLE IF NOT EXISTS Permission (
-            PermissionID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Code TEXT UNIQUE NOT NULL,
-            Libelle TEXT NOT NULL
-        );
-        
-        CREATE TABLE IF NOT EXISTS RolePermission (
-            RolePermissionID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Role TEXT NOT NULL,
-            PermissionID INTEGER NOT NULL,
-            FOREIGN KEY (PermissionID) REFERENCES Permission(PermissionID) ON DELETE CASCADE,
-            UNIQUE(Role, PermissionID)
-        );
-        
-        -- INDEX
-        CREATE INDEX IF NOT EXISTS idx_dossier_personnel ON Dossier(PersonnelID);
-        CREATE INDEX IF NOT EXISTS idx_recommandation_rapport ON Recommandation(RapportID);
-        CREATE INDEX IF NOT EXISTS idx_entete_document ON EnteteDocument(TypeDocument, Actif);
-        CREATE INDEX IF NOT EXISTS idx_historique_destinataire ON HistoriqueDocuments(Destinataire);
-        CREATE INDEX IF NOT EXISTS idx_historique_date ON HistoriqueDocuments(DateEmission);
-        CREATE INDEX IF NOT EXISTS idx_historique_type ON HistoriqueDocuments(TypeDocument);
-        CREATE INDEX IF NOT EXISTS idx_logs_utilisateur ON Logs(Utilisateur);
-        CREATE INDEX IF NOT EXISTS idx_logs_date ON Logs(DateLog);
-        CREATE INDEX IF NOT EXISTS idx_logs_action ON Logs(Action);
-        CREATE INDEX IF NOT EXISTS idx_logs_table ON Logs(TableConcernee);
-        CREATE INDEX IF NOT EXISTS idx_session_token ON Session(Token);
-        CREATE INDEX IF NOT EXISTS idx_session_utilisateur ON Session(UtilisateurID);
-        CREATE INDEX IF NOT EXISTS idx_utilisateur_email ON Utilisateur(Email);
-        CREATE INDEX IF NOT EXISTS idx_utilisateur_nom ON Utilisateur(NomUtilisateur);
-        "
-    )?;
+    // ==================== CRÉATION DES TABLES (UNIQUEMENT SI NOUVELLE BASE) ====================
+    if !db_exists {
+        println!("🆕 Nouvelle base de données - Création des tables...");
 
-    println!("✅ Tables créées avec succès");
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS Agent (
+                PersonnelID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Matricule TEXT UNIQUE NOT NULL,
+                Cle TEXT,
+                Nom TEXT NOT NULL,
+                Prenom TEXT NOT NULL,
+                GradeID INTEGER,
+                Service TEXT,
+                Entite TEXT,
+                Sexe TEXT,
+                Photo TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS Rapport (
+                RapportID INTEGER PRIMARY KEY AUTOINCREMENT,
+                LibelleRapport TEXT NOT NULL,
+                NumeroRapport TEXT UNIQUE NOT NULL,
+                DateRapport DATE NOT NULL,
+                TypeInspection TEXT,
+                PeriodeSousRevue TEXT,
+                Fichier TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS Dossier (
+                DossierID INTEGER PRIMARY KEY AUTOINCREMENT,
+                PersonnelID INTEGER NOT NULL,
+                TypeInconduite TEXT,
+                PeriodeInconduite TEXT,
+                Annee INTEGER,
+                ServiceInvestigation TEXT,
+                Etat TEXT DEFAULT 'En cours',
+                SuiteReservee TEXT,
+                TypeSanction TEXT,
+                Sanction TEXT,
+                ActeSanction TEXT,
+                NumeroActeSanction TEXT,
+                AutoriteSanction TEXT,
+                Observations TEXT,
+                IDRapport INTEGER,
+                FOREIGN KEY (PersonnelID) REFERENCES Agent(PersonnelID) ON DELETE CASCADE,
+                FOREIGN KEY (IDRapport) REFERENCES Rapport(RapportID) ON DELETE SET NULL
+            );
+            
+            CREATE TABLE IF NOT EXISTS Recommandation (
+                RecommandationID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Services TEXT,
+                Source TEXT,
+                RapportID INTEGER NOT NULL,
+                ProblemeFaiblesse TEXT,
+                NumeroRecommandation TEXT,
+                TexteRecommandation TEXT NOT NULL,
+                ResponsableMiseEnOeuvre TEXT,
+                ActeursImpliques TEXT,
+                InstanceValidation TEXT,
+                Echeance TEXT,
+                Domaine TEXT,
+                FOREIGN KEY (RapportID) REFERENCES Rapport(RapportID) ON DELETE CASCADE
+            );
+            
+            CREATE TABLE IF NOT EXISTS SuiviRecommandation (
+                SuiviID INTEGER PRIMARY KEY AUTOINCREMENT,
+                RecommandationID INTEGER NOT NULL,
+                MesuresCorrectives TEXT,
+                DateDebut TEXT,
+                DateFin TEXT,
+                NiveauMiseEnOeuvre TEXT DEFAULT 'Non commencé',
+                ObservationDelai TEXT,
+                ObservationMiseEnOeuvre TEXT,
+                AppreciationControle TEXT,
+                ReferenceJustificatif TEXT,
+                FichiersJustificatifs TEXT,
+                FOREIGN KEY (RecommandationID) REFERENCES Recommandation(RecommandationID) ON DELETE CASCADE
+            );
+            
+            CREATE TABLE IF NOT EXISTS Grade (
+                GradeID INTEGER PRIMARY KEY AUTOINCREMENT,
+                LibelleGrade TEXT NOT NULL UNIQUE,
+                Ordre INTEGER
+            );
+            
+            CREATE TABLE IF NOT EXISTS Sanction (
+                SanctionID INTEGER PRIMARY KEY AUTOINCREMENT,
+                LibelleSanction TEXT NOT NULL UNIQUE,
+                Categorie TEXT,
+                Niveau INTEGER
+            );
+            
+            CREATE TABLE IF NOT EXISTS ServiceInvestigation (
+                ServiceID INTEGER PRIMARY KEY AUTOINCREMENT,
+                LibelleService TEXT NOT NULL UNIQUE,
+                Acronyme TEXT,
+                Ordre INTEGER,
+                Actif INTEGER DEFAULT 1
+            );
+            
+            CREATE TABLE IF NOT EXISTS Signataire (
+                SignataireID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Nom TEXT NOT NULL,
+                Prenom TEXT NOT NULL,
+                Grade TEXT,
+                Fonction TEXT NOT NULL,
+                TitreHonorifique TEXT,
+                Statut INTEGER DEFAULT 1,
+                Ordre INTEGER,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(Nom, Prenom, Fonction) 
+            );
+            
+            CREATE TABLE IF NOT EXISTS ParametresGeneraux (
+                ParametreID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Code TEXT UNIQUE NOT NULL,
+                Valeur TEXT,
+                Description TEXT,
+                UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UpdatedBy TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS EnteteDocument (
+                EnteteID INTEGER PRIMARY KEY AUTOINCREMENT,
+                TypeDocument TEXT NOT NULL,
+                Champ TEXT NOT NULL,
+                Valeur TEXT,
+                Ordre INTEGER DEFAULT 0,
+                Actif INTEGER DEFAULT 1,
+                Style TEXT,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(TypeDocument, Champ)
+            );
+            
+            CREATE TABLE IF NOT EXISTS HistoriqueDocuments (
+                HistoriqueID INTEGER PRIMARY KEY AUTOINCREMENT,
+                TypeDocument TEXT NOT NULL,
+                Reference TEXT NOT NULL,
+                Objet TEXT,
+                Expediteur TEXT,
+                Destinataire TEXT,
+                SignataireID INTEGER,
+                DateEmission DATETIME DEFAULT CURRENT_TIMESTAMP,
+                Contenu TEXT,
+                FichierPath TEXT,
+                Statut TEXT DEFAULT 'Généré',
+                CreatedBy TEXT,
+                CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (SignataireID) REFERENCES Signataire(SignataireID)
+            );
+            
+            CREATE TABLE IF NOT EXISTS HistoriqueRecherches (
+                RechercheID INTEGER PRIMARY KEY AUTOINCREMENT,
+                TypeRecherche TEXT,
+                Valeur TEXT,
+                ResultatsCount INTEGER,
+                DateRecherche DATETIME DEFAULT CURRENT_TIMESTAMP,
+                Utilisateur TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS Logs (
+                LogID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Utilisateur TEXT NOT NULL,
+                Action TEXT NOT NULL,
+                TableConcernee TEXT NOT NULL,
+                EnregistrementID INTEGER,
+                AnciennesValeurs TEXT,
+                NouvellesValeurs TEXT,
+                AdresseIP TEXT,
+                SessionID TEXT,
+                Details TEXT,
+                DateLog DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS Utilisateur (
+                UtilisateurID INTEGER PRIMARY KEY AUTOINCREMENT,
+                NomUtilisateur TEXT UNIQUE NOT NULL,
+                Email TEXT UNIQUE NOT NULL,
+                MotDePasse TEXT NOT NULL,
+                Nom TEXT,
+                Prenom TEXT,
+                Role TEXT DEFAULT 'user',
+                Statut INTEGER DEFAULT 1,
+                TentativesConnexion INTEGER DEFAULT 0,
+                DerniereConnexion DATETIME,
+                DateCreation DATETIME DEFAULT CURRENT_TIMESTAMP,
+                DateModification DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS Session (
+                SessionID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Token TEXT UNIQUE NOT NULL,
+                UtilisateurID INTEGER NOT NULL,
+                DateCreation DATETIME DEFAULT CURRENT_TIMESTAMP,
+                DateExpiration DATETIME,
+                AdresseIP TEXT,
+                Actif INTEGER DEFAULT 1,
+                FOREIGN KEY (UtilisateurID) REFERENCES Utilisateur(UtilisateurID) ON DELETE CASCADE
+            );
+            
+            CREATE TABLE IF NOT EXISTS Permission (
+                PermissionID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Code TEXT UNIQUE NOT NULL,
+                Libelle TEXT NOT NULL
+            );
+            
+            CREATE TABLE IF NOT EXISTS RolePermission (
+                RolePermissionID INTEGER PRIMARY KEY AUTOINCREMENT,
+                Role TEXT NOT NULL,
+                PermissionID INTEGER NOT NULL,
+                FOREIGN KEY (PermissionID) REFERENCES Permission(PermissionID) ON DELETE CASCADE,
+                UNIQUE(Role, PermissionID)
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_dossier_personnel ON Dossier(PersonnelID);
+            CREATE INDEX IF NOT EXISTS idx_recommandation_rapport ON Recommandation(RapportID);
+            CREATE INDEX IF NOT EXISTS idx_entete_document ON EnteteDocument(TypeDocument, Actif);
+            CREATE INDEX IF NOT EXISTS idx_historique_destinataire ON HistoriqueDocuments(Destinataire);
+            CREATE INDEX IF NOT EXISTS idx_historique_date ON HistoriqueDocuments(DateEmission);
+            CREATE INDEX IF NOT EXISTS idx_historique_type ON HistoriqueDocuments(TypeDocument);
+            CREATE INDEX IF NOT EXISTS idx_logs_utilisateur ON Logs(Utilisateur);
+            CREATE INDEX IF NOT EXISTS idx_logs_date ON Logs(DateLog);
+            CREATE INDEX IF NOT EXISTS idx_logs_action ON Logs(Action);
+            CREATE INDEX IF NOT EXISTS idx_logs_table ON Logs(TableConcernee);
+            CREATE INDEX IF NOT EXISTS idx_session_token ON Session(Token);
+            CREATE INDEX IF NOT EXISTS idx_session_utilisateur ON Session(UtilisateurID);
+            CREATE INDEX IF NOT EXISTS idx_utilisateur_email ON Utilisateur(Email);
+            CREATE INDEX IF NOT EXISTS idx_utilisateur_nom ON Utilisateur(NomUtilisateur);
+            ",
+        )?;
 
-    // ==================== INSERTION DES GRADES ====================
-    let grades = vec![
-        (1, "Adjudant-Chef de Police"),
-        (2, "Adjudant-Chef Major de Police"),
-        (3, "Capitaine de Police"),
-        (4, "Commandant de Police"),
-        (5, "Commandant Major de Police"),
-        (6, "Commissaire de Police"),
-        (7, "Commissaire Divisionnaire de Police"),
-        (8, "Commissaire Principal de Police"),
-        (9, "Contrôleur Général de Police"),
-        (10, "Inspecteur Général de Police"),
-        (11, "Lieutenant de police"),
-        (12, "Médecin-Commissaire Divisionnaire de Police"),
-        (13, "Médecin-Commissaire Principal de Police"),
-        (14, "Sergent de Police"),
-        (15, "Sergent-Chef de Police"),
-        (16, "Sous-lieutenant de Police"),
-        (17, "Maréchal des logies"),
-        (18, "MDL-Chef"),
-        (19, "Elève officier de police"),
-        (20, "Capitaine de Gendarmerie"),
-        (21, "Commandant de Gendarmerie"),
-        (22, "Adjudant-Chef Major"),
-        (23, "Adjudant"),
-        (24, "Maréchal des Logis Chef"),
-        (25, "Maréchal des Logis"),
-        (26, "Adjudant-Chef"),
-        (28, "Adjudant de Police"),
-    ];
+        println!("✅ Tables créées avec succès");
 
-    for (id, libelle) in &grades {
-        conn.execute(
-            "INSERT OR IGNORE INTO Grade (GradeID, LibelleGrade, Ordre) VALUES (?1, ?2, ?3)",
-            params![id, libelle, id],
-        )
-        .ok();
-    }
-    println!("✅ Grades insérés: {}", grades.len());
+        // ==================== INSERTION DES GRADES ====================
+        let grades = vec![
+            (1, "Adjudant-Chef de Police"),
+            (2, "Adjudant-Chef Major de Police"),
+            (3, "Capitaine de Police"),
+            (4, "Commandant de Police"),
+            (5, "Commandant Major de Police"),
+            (6, "Commissaire de Police"),
+            (7, "Commissaire Divisionnaire de Police"),
+            (8, "Commissaire Principal de Police"),
+            (9, "Contrôleur Général de Police"),
+            (10, "Inspecteur Général de Police"),
+            (11, "Lieutenant de police"),
+            (12, "Médecin-Commissaire Divisionnaire de Police"),
+            (13, "Médecin-Commissaire Principal de Police"),
+            (14, "Sergent de Police"),
+            (15, "Sergent-Chef de Police"),
+            (16, "Sous-lieutenant de Police"),
+            (17, "Maréchal des logies"),
+            (18, "MDL-Chef"),
+            (19, "Elève officier de police"),
+            (20, "Capitaine de Gendarmerie"),
+            (21, "Commandant de Gendarmerie"),
+            (22, "Adjudant-Chef Major"),
+            (23, "Adjudant"),
+            (24, "Maréchal des Logis Chef"),
+            (25, "Maréchal des Logis"),
+            (26, "Adjudant-Chef"),
+            (28, "Adjudant de Police"),
+        ];
 
-    // ==================== INSERTION DES SANCTIONS ====================
-    let sanctions = vec![
-        "Avertissement avec inscription au dossier",
-        "Consigne au casernement",
-        "Arrêt simple",
-        "Détention en salle de police",
-        "Arrêt de rigueur",
-        "Blâme",
-        "Radiation du tableau d'avancement",
-        "Abaissement d'échelon",
-        "Rétrogradation",
-        "Mise à la retraite d'office",
-        "Révocation",
-        "Licenciement",
-    ];
-
-    for (i, sanction) in sanctions.iter().enumerate() {
-        conn.execute(
-            "INSERT OR IGNORE INTO Sanction (LibelleSanction, Niveau) VALUES (?1, ?2)",
-            params![sanction, i as i64 + 1],
-        )
-        .ok();
-    }
-    println!("✅ Sanctions insérées: {}", sanctions.len());
-
-    // ==================== INSERTION DES SERVICES D'INVESTIGATION ====================
-    let services = vec![
-        (1, "L'Inspection technique des services (ITS)", "ITS"),
-        (
-            2,
-            "le Service contrôle de la direction générale de la police nationale",
-            "SC-DGPN",
-        ),
-        (
-            3,
-            "la Coordination nationale de contrôle des forces de police",
-            "CONACFP",
-        ),
-        (4, "le contrôle interne de l'Académie de police", "ACADEMIE"),
-        (
-            5,
-            "le contrôle interne de l'Ecole nationale de police",
-            "ENP",
-        ),
-        (
-            6,
-            "le contrôle interne de l'Office national d'identification",
-            "ONI",
-        ),
-        (
-            7,
-            "le contrôle interne de l'Office national de sécurisation des sites miniers",
-            "ONASSIM",
-        ),
-        (
-            8,
-            "le contrôle interne de l'Office national de sécurité routière",
-            "ONASER",
-        ),
-        (
-            9,
-            "L'Autorité Supérieure de Contrôle de Contrôle d'Etat",
-            "ASCE-LC",
-        ),
-        (10, "L'Inspection Générale des Finances", "IGF"),
-        (
-            11,
-            "L'Inspection générale des forces armées nationales",
-            "IGFAN",
-        ),
-        (
-            12,
-            "l'Inspection interne de la Gendarmerie nationale",
-            "GENDARMERIE",
-        ),
-        (
-            13,
-            "le Réseau national de lutte contre la corruption",
-            "REN-LAC",
-        ),
-    ];
-
-    for (id, libelle, acronyme) in &services {
-        conn.execute(
-            "INSERT OR IGNORE INTO ServiceInvestigation (ServiceID, LibelleService, Acronyme, Ordre, Actif) VALUES (?1, ?2, ?3, ?4, 1)",
-            params![id, libelle, acronyme, id],
-        ).ok();
-    }
-    println!("✅ Services investigation insérés: {}", services.len());
-
-    // ==================== INSERTION DES PARAMÈTRES GÉNÉRAUX ====================
-    let parametres = vec![
-        (
-            "MINISTERE",
-            "MINISTERE DE LA SECURITE",
-            "Ministère de tutelle",
-        ),
-        ("CABINET", "CABINET", "Cabinet ministériel"),
-        (
-            "SERVICE",
-            "INSPECTION TECHNIQUE DES SERVICES",
-            "Service émetteur",
-        ),
-        ("PAYS", "BURKINA FASO", "Pays"),
-        (
-            "DEVISE",
-            "La Patrie ou la Mort, nous vaincrons",
-            "Devise nationale",
-        ),
-        ("LOGO_PATH", "", "Chemin du logo"),
-        (
-            "SERVICE_POLICE",
-            "DIRECTION GENERALE DE LA POLICE NATIONALE",
-            "Service pour liste agents",
-        ),
-        (
-            "SERVICE_RH",
-            "DIRECTION DES RESSOURCES HUMAINES",
-            "Service RH pour liste agents",
-        ),
-    ];
-
-    for (code, valeur, description) in &parametres {
-        conn.execute(
-            "INSERT OR IGNORE INTO ParametresGeneraux (Code, Valeur, Description, UpdatedBy) VALUES (?1, ?2, ?3, 'System')",
-            params![code, valeur, description],
-        ).ok();
-    }
-    println!("✅ Paramètres généraux insérés: {}", parametres.len());
-
-    // ==================== INSERTION DES ENTÊTES PAR DÉFAUT ====================
-
-    // 1. RAPPORT
-    let entetes_rapport = vec![
-        ("MINISTERE", "[MINISTERE]", 1),
-        ("SEPARATEUR1", "---", 2),
-        ("CABINET", "[CABINET]", 3),
-        ("SEPARATEUR2", "---", 4),
-        ("SERVICE", "[SERVICE]", 5),
-        ("SEPARATEUR3", "---", 6),
-        ("PAYS", "[PAYS]", 7),
-        ("DEVISE", "[DEVISE]", 8),
-    ];
-    for (champ, valeur, ordre) in &entetes_rapport {
-        conn.execute(
-        "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('RAPPORT', ?1, ?2, ?3)",
-        params![champ, valeur, ordre],
-    ).ok();
-    }
-    println!("✅ Entêtes RAPPORT insérées: {}", entetes_rapport.len());
-
-    // 2. AGENT (Liste des agents)
-    let entetes_agent = vec![
-        ("MINISTERE", "[MINISTERE]", 1),
-        ("SEPARATEUR1", "---", 2),
-        ("DIRECTION", "[SERVICE_POLICE]", 3),
-        ("SEPARATEUR2", "---", 4),
-        ("SERVICE", "[SERVICE_RH]", 5),
-        ("SEPARATEUR3", "---", 6),
-        ("PAYS", "[PAYS]", 7),
-        ("DEVISE", "[DEVISE]", 8),
-        ("TITRE", "LISTE DES AGENTS", 9),
-    ];
-    for (champ, valeur, ordre) in &entetes_agent {
-        conn.execute(
-        "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('AGENT', ?1, ?2, ?3)",
-        params![champ, valeur, ordre],
-    ).ok();
-    }
-    println!("✅ Entêtes AGENT insérées: {}", entetes_agent.len());
-
-    // 3. DOSSIER
-    let entetes_dossier = vec![
-        ("MINISTERE", "[MINISTERE]", 1),
-        ("SEPARATEUR1", "---", 2),
-        ("SERVICE", "[SERVICE_POLICE]", 3),
-        ("SEPARATEUR2", "---", 4),
-        ("TITRE", "DOSSIER D'INCONDUITE", 5),
-        ("PAYS", "[PAYS]", 6),
-        ("DEVISE", "[DEVISE]", 7),
-    ];
-    for (champ, valeur, ordre) in &entetes_dossier {
-        conn.execute(
-        "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('DOSSIER', ?1, ?2, ?3)",
-        params![champ, valeur, ordre],
-    ).ok();
-    }
-    println!("✅ Entêtes DOSSIER insérées: {}", entetes_dossier.len());
-
-    // 4. RECOMMANDATION
-    let entetes_reco = vec![
-        ("MINISTERE", "[MINISTERE]", 1),
-        ("SEPARATEUR1", "---", 2),
-        ("SERVICE", "[SERVICE]", 3),
-        ("SEPARATEUR2", "---", 4),
-        ("PAYS", "[PAYS]", 5),
-        ("DEVISE", "[DEVISE]", 6),
-    ];
-    for (champ, valeur, ordre) in &entetes_reco {
-        conn.execute(
-        "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('RECOMMANDATION', ?1, ?2, ?3)",
-        params![champ, valeur, ordre],
-    ).ok();
-    }
-    println!("✅ Entêtes RECOMMANDATION insérées: {}", entetes_reco.len());
-
-    // 5. SUIVI_RECOMMANDATIONS (NOUVEAU)
-    let entetes_suivi = vec![
-        ("MINISTERE", "[MINISTERE]", 1),
-        ("SEPARATEUR1", "---", 2),
-        ("SERVICE", "[SERVICE]", 3),
-        ("SEPARATEUR2", "---", 4),
-        ("TITRE", "SUIVI DES RECOMMANDATIONS", 5),
-        ("PAYS", "[PAYS]", 6),
-        ("DEVISE", "[DEVISE]", 7),
-        ("PERIODE", "Période du [DATE_DEBUT] au [DATE_FIN]", 8),
-    ];
-    for (champ, valeur, ordre) in &entetes_suivi {
-        conn.execute(
-        "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('SUIVI_RECOMMANDATIONS', ?1, ?2, ?3)",
-        params![champ, valeur, ordre],
-    ).ok();
-    }
-    println!(
-        "✅ Entêtes SUIVI_RECOMMANDATIONS insérées: {}",
-        entetes_suivi.len()
-    );
-
-    // ==================== INSERTION DES SIGNATAIRES ====================
-
-    // 1. Supprimer les anciens doublons
-    conn.execute(
-        "DELETE FROM Signataire WHERE Nom = 'KORGO' AND Prenom = 'Jacques'",
-        [],
-    )
-    .ok();
-
-    // 2. Insérer un seul signataire
-    let signataires = vec![(
-        "KORGO",                            // Nom
-        "Jacques",                          // Prénom
-        "Lieutenant de Police",             // Grade
-        "Développeur",                      // Fonction
-        "Chevalier de l'Ordre de l'Etalon", // TitreHonorifique
-        1,                                  // Statut (1 = actif)
-        1,                                  // Ordre
-    )];
-
-    for (nom, prenom, grade, fonction, titre, statut, ordre) in &signataires {
-        conn.execute(
-        "INSERT INTO Signataire (Nom, Prenom, Grade, Fonction, TitreHonorifique, Statut, Ordre) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![nom, prenom, grade, fonction, titre, statut, ordre],
-    ).ok();
-    }
-
-    println!("✅ Signataires insérés: {}", signataires.len());
-
-    // ==================== INSERTION DES PERMISSIONS ====================
-    let permissions = vec![
-        ("agents.view", "Voir les agents"),
-        ("agents.create", "Créer des agents"),
-        ("agents.edit", "Modifier des agents"),
-        ("agents.delete", "Supprimer des agents"),
-        ("rapports.view", "Voir les rapports"),
-        ("rapports.create", "Créer des rapports"),
-        ("rapports.edit", "Modifier des rapports"),
-        ("rapports.delete", "Supprimer des rapports"),
-        ("dossiers.view", "Voir les dossiers"),
-        ("dossiers.create", "Créer des dossiers"),
-        ("dossiers.edit", "Modifier des dossiers"),
-        ("dossiers.delete", "Supprimer des dossiers"),
-        ("recommandations.view", "Voir les recommandations"),
-        ("recommandations.create", "Créer des recommandations"),
-        ("recommandations.edit", "Modifier des recommandations"),
-        ("recommandations.delete", "Supprimer des recommandations"),
-        ("recommandations.suivi", "Suivre les recommandations"),
-        ("admin.users", "Gérer les utilisateurs"),
-        ("admin.roles", "Gérer les rôles"),
-        ("admin.permissions", "Gérer les permissions"),
-        ("parametres.view", "Voir les paramètres"),
-        ("parametres.edit", "Modifier les paramètres"),
-        ("logs.view", "Voir les logs"),
-    ];
-
-    for (code, libelle) in &permissions {
-        conn.execute(
-            "INSERT OR IGNORE INTO Permission (Code, Libelle) VALUES (?1, ?2)",
-            params![code, libelle],
-        )
-        .ok();
-    }
-    println!("✅ Permissions insérées: {}", permissions.len());
-
-    // ==================== INSERTION DES RÔLES ET PERMISSIONS ====================
-    // Rôle admin avec toutes les permissions
-    let admin_permissions: Vec<String> = permissions
-        .iter()
-        .map(|(code, _)| code.to_string())
-        .collect();
-    for perm_code in admin_permissions {
-        let perm_id: i64 = conn
-            .query_row(
-                "SELECT PermissionID FROM Permission WHERE Code = ?1",
-                [&perm_code],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-        if perm_id > 0 {
+        for (id, libelle) in &grades {
             conn.execute(
-                "INSERT OR IGNORE INTO RolePermission (Role, PermissionID) VALUES ('admin', ?1)",
-                [perm_id],
+                "INSERT OR IGNORE INTO Grade (GradeID, LibelleGrade, Ordre) VALUES (?1, ?2, ?3)",
+                params![id, libelle, id],
             )
             .ok();
         }
-    }
+        println!("✅ Grades insérés: {}", grades.len());
 
-    // Rôle user avec permissions de base
-    let user_permissions = vec![
-        "agents.view",
-        "rapports.view",
-        "dossiers.view",
-        "recommandations.view",
-        "recommandations.suivi",
-    ];
-    for perm_code in user_permissions {
-        let perm_id: i64 = conn
-            .query_row(
-                "SELECT PermissionID FROM Permission WHERE Code = ?1",
-                [perm_code],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-        if perm_id > 0 {
+        // ==================== INSERTION DES SANCTIONS ====================
+        let sanctions = vec![
+            "Avertissement avec inscription au dossier",
+            "Consigne au casernement",
+            "Arrêt simple",
+            "Détention en salle de police",
+            "Arrêt de rigueur",
+            "Blâme",
+            "Radiation du tableau d'avancement",
+            "Abaissement d'échelon",
+            "Rétrogradation",
+            "Mise à la retraite d'office",
+            "Révocation",
+            "Licenciement",
+        ];
+
+        for (i, sanction) in sanctions.iter().enumerate() {
             conn.execute(
-                "INSERT OR IGNORE INTO RolePermission (Role, PermissionID) VALUES ('user', ?1)",
-                [perm_id],
+                "INSERT OR IGNORE INTO Sanction (LibelleSanction, Niveau) VALUES (?1, ?2)",
+                params![sanction, i as i64 + 1],
             )
             .ok();
         }
+        println!("✅ Sanctions insérées: {}", sanctions.len());
+
+        // ==================== INSERTION DES SERVICES D'INVESTIGATION ====================
+        let services = vec![
+            (1, "L'Inspection technique des services (ITS)", "ITS"),
+            (
+                2,
+                "le Service contrôle de la direction générale de la police nationale",
+                "SC-DGPN",
+            ),
+            (
+                3,
+                "la Coordination nationale de contrôle des forces de police",
+                "CONACFP",
+            ),
+            (4, "le contrôle interne de l'Académie de police", "ACADEMIE"),
+            (
+                5,
+                "le contrôle interne de l'Ecole nationale de police",
+                "ENP",
+            ),
+            (
+                6,
+                "le contrôle interne de l'Office national d'identification",
+                "ONI",
+            ),
+            (
+                7,
+                "le contrôle interne de l'Office national de sécurisation des sites miniers",
+                "ONASSIM",
+            ),
+            (
+                8,
+                "le contrôle interne de l'Office national de sécurité routière",
+                "ONASER",
+            ),
+            (
+                9,
+                "L'Autorité Supérieure de Contrôle de Contrôle d'Etat",
+                "ASCE-LC",
+            ),
+            (10, "L'Inspection Générale des Finances", "IGF"),
+            (
+                11,
+                "L'Inspection générale des forces armées nationales",
+                "IGFAN",
+            ),
+            (
+                12,
+                "l'Inspection interne de la Gendarmerie nationale",
+                "GENDARMERIE",
+            ),
+            (
+                13,
+                "le Réseau national de lutte contre la corruption",
+                "REN-LAC",
+            ),
+        ];
+
+        for (id, libelle, acronyme) in &services {
+            conn.execute(
+                "INSERT OR IGNORE INTO ServiceInvestigation (ServiceID, LibelleService, Acronyme, Ordre, Actif) VALUES (?1, ?2, ?3, ?4, 1)",
+                params![id, libelle, acronyme, id],
+            ).ok();
+        }
+        println!("✅ Services investigation insérés: {}", services.len());
+
+        // ==================== INSERTION DES PARAMÈTRES GÉNÉRAUX ====================
+        let parametres = vec![
+            (
+                "MINISTERE",
+                "MINISTERE DE LA SECURITE",
+                "Ministère de tutelle",
+            ),
+            ("CABINET", "CABINET", "Cabinet ministériel"),
+            (
+                "SERVICE",
+                "INSPECTION TECHNIQUE DES SERVICES",
+                "Service émetteur",
+            ),
+            ("PAYS", "BURKINA FASO", "Pays"),
+            (
+                "DEVISE",
+                "La Patrie ou la Mort, nous vaincrons",
+                "Devise nationale",
+            ),
+            ("LOGO_PATH", "", "Chemin du logo"),
+            (
+                "SERVICE_POLICE",
+                "DIRECTION GENERALE DE LA POLICE NATIONALE",
+                "Service pour liste agents",
+            ),
+            (
+                "SERVICE_RH",
+                "DIRECTION DES RESSOURCES HUMAINES",
+                "Service RH pour liste agents",
+            ),
+        ];
+
+        for (code, valeur, description) in &parametres {
+            conn.execute(
+                "INSERT OR IGNORE INTO ParametresGeneraux (Code, Valeur, Description, UpdatedBy) VALUES (?1, ?2, ?3, 'System')",
+                params![code, valeur, description],
+            ).ok();
+        }
+        println!("✅ Paramètres généraux insérés: {}", parametres.len());
+
+        // ==================== INSERTION DES ENTÊTES PAR DÉFAUT ====================
+        let entetes_rapport = vec![
+            ("MINISTERE", "[MINISTERE]", 1),
+            ("SEPARATEUR1", "---", 2),
+            ("CABINET", "[CABINET]", 3),
+            ("SEPARATEUR2", "---", 4),
+            ("SERVICE", "[SERVICE]", 5),
+            ("SEPARATEUR3", "---", 6),
+            ("PAYS", "[PAYS]", 7),
+            ("DEVISE", "[DEVISE]", 8),
+        ];
+        for (champ, valeur, ordre) in &entetes_rapport {
+            conn.execute(
+                "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('RAPPORT', ?1, ?2, ?3)",
+                params![champ, valeur, ordre],
+            ).ok();
+        }
+        println!("✅ Entêtes RAPPORT insérées: {}", entetes_rapport.len());
+
+        let entetes_agent = vec![
+            ("MINISTERE", "[MINISTERE]", 1),
+            ("SEPARATEUR1", "---", 2),
+            ("DIRECTION", "[SERVICE_POLICE]", 3),
+            ("SEPARATEUR2", "---", 4),
+            ("SERVICE", "[SERVICE_RH]", 5),
+            ("SEPARATEUR3", "---", 6),
+            ("PAYS", "[PAYS]", 7),
+            ("DEVISE", "[DEVISE]", 8),
+            ("TITRE", "LISTE DES AGENTS", 9),
+        ];
+        for (champ, valeur, ordre) in &entetes_agent {
+            conn.execute(
+                "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('AGENT', ?1, ?2, ?3)",
+                params![champ, valeur, ordre],
+            ).ok();
+        }
+        println!("✅ Entêtes AGENT insérées: {}", entetes_agent.len());
+
+        let entetes_dossier = vec![
+            ("MINISTERE", "[MINISTERE]", 1),
+            ("SEPARATEUR1", "---", 2),
+            ("SERVICE", "[SERVICE_POLICE]", 3),
+            ("SEPARATEUR2", "---", 4),
+            ("TITRE", "DOSSIER D'INCONDUITE", 5),
+            ("PAYS", "[PAYS]", 6),
+            ("DEVISE", "[DEVISE]", 7),
+        ];
+        for (champ, valeur, ordre) in &entetes_dossier {
+            conn.execute(
+                "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('DOSSIER', ?1, ?2, ?3)",
+                params![champ, valeur, ordre],
+            ).ok();
+        }
+        println!("✅ Entêtes DOSSIER insérées: {}", entetes_dossier.len());
+
+        let entetes_reco = vec![
+            ("MINISTERE", "[MINISTERE]", 1),
+            ("SEPARATEUR1", "---", 2),
+            ("SERVICE", "[SERVICE]", 3),
+            ("SEPARATEUR2", "---", 4),
+            ("PAYS", "[PAYS]", 5),
+            ("DEVISE", "[DEVISE]", 6),
+        ];
+        for (champ, valeur, ordre) in &entetes_reco {
+            conn.execute(
+                "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('RECOMMANDATION', ?1, ?2, ?3)",
+                params![champ, valeur, ordre],
+            ).ok();
+        }
+        println!("✅ Entêtes RECOMMANDATION insérées: {}", entetes_reco.len());
+
+        let entetes_suivi = vec![
+            ("MINISTERE", "[MINISTERE]", 1),
+            ("SEPARATEUR1", "---", 2),
+            ("SERVICE", "[SERVICE]", 3),
+            ("SEPARATEUR2", "---", 4),
+            ("TITRE", "SUIVI DES RECOMMANDATIONS", 5),
+            ("PAYS", "[PAYS]", 6),
+            ("DEVISE", "[DEVISE]", 7),
+            ("PERIODE", "Période du [DATE_DEBUT] au [DATE_FIN]", 8),
+        ];
+        for (champ, valeur, ordre) in &entetes_suivi {
+            conn.execute(
+                "INSERT OR IGNORE INTO EnteteDocument (TypeDocument, Champ, Valeur, Ordre) VALUES ('SUIVI_RECOMMANDATIONS', ?1, ?2, ?3)",
+                params![champ, valeur, ordre],
+            ).ok();
+        }
+        println!(
+            "✅ Entêtes SUIVI_RECOMMANDATIONS insérées: {}",
+            entetes_suivi.len()
+        );
+
+        // ==================== INSERTION DES SIGNATAIRES ====================
+        conn.execute(
+            "DELETE FROM Signataire WHERE Nom = 'KORGO' AND Prenom = 'Jacques'",
+            [],
+        )
+        .ok();
+
+        let signataires = vec![(
+            "KORGO",
+            "Jacques",
+            "Lieutenant de Police",
+            "Développeur",
+            "Chevalier de l'Ordre de l'Etalon",
+            1,
+            1,
+        )];
+
+        for (nom, prenom, grade, fonction, titre, statut, ordre) in &signataires {
+            conn.execute(
+                "INSERT INTO Signataire (Nom, Prenom, Grade, Fonction, TitreHonorifique, Statut, Ordre) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![nom, prenom, grade, fonction, titre, statut, ordre],
+            ).ok();
+        }
+        println!("✅ Signataires insérés: {}", signataires.len());
+
+        // ==================== INSERTION DES PERMISSIONS ====================
+        let permissions = vec![
+            ("agents.view", "Voir les agents"),
+            ("agents.create", "Créer des agents"),
+            ("agents.edit", "Modifier des agents"),
+            ("agents.delete", "Supprimer des agents"),
+            ("rapports.view", "Voir les rapports"),
+            ("rapports.create", "Créer des rapports"),
+            ("rapports.edit", "Modifier des rapports"),
+            ("rapports.delete", "Supprimer des rapports"),
+            ("dossiers.view", "Voir les dossiers"),
+            ("dossiers.create", "Créer des dossiers"),
+            ("dossiers.edit", "Modifier des dossiers"),
+            ("dossiers.delete", "Supprimer des dossiers"),
+            ("recommandations.view", "Voir les recommandations"),
+            ("recommandations.create", "Créer des recommandations"),
+            ("recommandations.edit", "Modifier des recommandations"),
+            ("recommandations.delete", "Supprimer des recommandations"),
+            ("recommandations.suivi", "Suivre les recommandations"),
+            ("admin.users", "Gérer les utilisateurs"),
+            ("admin.roles", "Gérer les rôles"),
+            ("admin.permissions", "Gérer les permissions"),
+            ("parametres.view", "Voir les paramètres"),
+            ("parametres.edit", "Modifier les paramètres"),
+            ("logs.view", "Voir les logs"),
+        ];
+
+        for (code, libelle) in &permissions {
+            conn.execute(
+                "INSERT OR IGNORE INTO Permission (Code, Libelle) VALUES (?1, ?2)",
+                params![code, libelle],
+            )
+            .ok();
+        }
+        println!("✅ Permissions insérées: {}", permissions.len());
+
+        // ==================== INSERTION DES RÔLES ET PERMISSIONS ====================
+        for perm_code in permissions.iter().map(|(code, _)| code.to_string()) {
+            let perm_id: i64 = conn
+                .query_row(
+                    "SELECT PermissionID FROM Permission WHERE Code = ?1",
+                    [&perm_code],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if perm_id > 0 {
+                conn.execute(
+                    "INSERT OR IGNORE INTO RolePermission (Role, PermissionID) VALUES ('admin', ?1)",
+                    [perm_id],
+                ).ok();
+            }
+        }
+
+        let user_permissions = vec![
+            "agents.view",
+            "rapports.view",
+            "dossiers.view",
+            "recommandations.view",
+            "recommandations.suivi",
+        ];
+        for perm_code in user_permissions {
+            let perm_id: i64 = conn
+                .query_row(
+                    "SELECT PermissionID FROM Permission WHERE Code = ?1",
+                    [perm_code],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if perm_id > 0 {
+                conn.execute(
+                    "INSERT OR IGNORE INTO RolePermission (Role, PermissionID) VALUES ('user', ?1)",
+                    [perm_id],
+                )
+                .ok();
+            }
+        }
+        println!("✅ Rôles et permissions configurés");
+
+        // ==================== CRÉATION DE L'UTILISATEUR ADMIN PAR DÉFAUT ====================
+        use bcrypt::{hash, DEFAULT_COST};
+        let admin_password = hash("admin123", DEFAULT_COST).unwrap_or_default();
+
+        conn.execute(
+            "INSERT OR IGNORE INTO Utilisateur (NomUtilisateur, Email, MotDePasse, Nom, Prenom, Role, Statut) 
+             VALUES ('admin', 'admin@example.com', ?1, 'Administrateur', 'Système', 'admin', 1)",
+            params![admin_password],
+        ).ok();
+
+        println!("✅ Utilisateur admin créé avec:");
+        println!("   - Email: admin@example.com");
+        println!("   - Mot de passe: admin123");
+
+        // ==================== LOG INITIAL ====================
+        let _ = conn.execute(
+            "INSERT INTO Logs (Utilisateur, Action, TableConcernee, Details) VALUES (?1, ?2, ?3, ?4)",
+            params!["System", "CREATE", "Database", "Initialisation de la base de données avec authentification"],
+        );
+    } else {
+        println!("📀 Base de données existante - Migration uniquement...");
+
+        // ==================== MIGRATIONS POUR BASES EXISTANTES ====================
+        // Ces commandes ajoutent les colonnes manquantes sans supprimer les données
+
+        // Migration pour SuiviRecommandation - Ajout de FichiersJustificatifs
+        match conn.execute(
+            "ALTER TABLE SuiviRecommandation ADD COLUMN FichiersJustificatifs TEXT",
+            [],
+        ) {
+            Ok(_) => println!("✅ Colonne FichiersJustificatifs ajoutée à SuiviRecommandation"),
+            Err(e) => {
+                if e.to_string().contains("duplicate column name") {
+                    println!("ℹ️ Colonne FichiersJustificatifs existe déjà");
+                }
+            }
+        }
+
+        // Migration pour SuiviRecommandation - Ajout de ReferenceJustificatif
+        match conn.execute(
+            "ALTER TABLE SuiviRecommandation ADD COLUMN ReferenceJustificatif TEXT",
+            [],
+        ) {
+            Ok(_) => println!("✅ Colonne ReferenceJustificatif ajoutée"),
+            Err(e) => {
+                if !e.to_string().contains("duplicate column name") {
+                    println!("⚠️ Note: {}", e);
+                }
+            }
+        }
+
+        // Migrations pour Recommandation - Ajout des colonnes manquantes
+        let colonnes_recommandation = vec![
+            ("Services", "TEXT"),
+            ("Source", "TEXT"),
+            ("ProblemeFaiblesse", "TEXT"),
+            ("NumeroRecommandation", "TEXT"),
+            ("ResponsableMiseEnOeuvre", "TEXT"),
+            ("ActeursImpliques", "TEXT"),
+            ("InstanceValidation", "TEXT"),
+            ("Echeance", "TEXT"),
+            ("Domaine", "TEXT"),
+        ];
+
+        for (col_name, col_type) in colonnes_recommandation {
+            match conn.execute(
+                &format!(
+                    "ALTER TABLE Recommandation ADD COLUMN {} {}",
+                    col_name, col_type
+                ),
+                [],
+            ) {
+                Ok(_) => println!("✅ Colonne {} ajoutée à Recommandation", col_name),
+                Err(e) => {
+                    if !e.to_string().contains("duplicate column name") {
+                        println!("⚠️ Note pour {}: {}", col_name, e);
+                    }
+                }
+            }
+        }
+
+        println!("✅ Migrations terminées - Données préservées");
     }
-    println!("✅ Rôles et permissions configurés");
 
-    // ==================== CRÉATION DE L'UTILISATEUR ADMIN PAR DÉFAUT ====================
-    use bcrypt::{hash, DEFAULT_COST};
-    let admin_password = hash("admin123", DEFAULT_COST).unwrap_or_default();
-
-    conn.execute(
-        "INSERT OR IGNORE INTO Utilisateur (NomUtilisateur, Email, MotDePasse, Nom, Prenom, Role, Statut) 
-         VALUES ('admin', 'admin@example.com', ?1, 'Administrateur', 'Système', 'admin', 1)",
-        params![admin_password],
-    ).ok();
-
-    println!("✅ Utilisateur admin créé avec:");
-    println!("   - Email: admin@example.com");
-    println!("   - Mot de passe: admin123");
-
-    // ==================== LOG INITIAL ====================
-    let _ = conn.execute(
-        "INSERT INTO Logs (Utilisateur, Action, TableConcernee, Details) VALUES (?1, ?2, ?3, ?4)",
-        params![
-            "System",
-            "CREATE",
-            "Database",
-            "Initialisation de la base de données avec authentification"
-        ],
-    );
-
-    // ==================== RÉCAPITULATIF ====================
-    let nb_grades = grades.len();
-    let nb_sanctions = sanctions.len();
-    let nb_services = services.len();
-    let nb_parametres = parametres.len();
-    let nb_entetes_rapport = entetes_rapport.len();
-    let nb_entetes_agent = entetes_agent.len();
-    let nb_entetes_reco = entetes_reco.len();
-    let nb_entetes_dossier = entetes_dossier.len();
-    let nb_signataires = signataires.len();
-    let nb_permissions = permissions.len();
-
-    println!("\n📊 RÉCAPITULATIF DE L'INITIALISATION DE LA BASE DE DONNÉES:");
-    println!("   - Grades: {} entrées", nb_grades);
-    println!("   - Sanctions: {} entrées", nb_sanctions);
-    println!("   - Services investigation: {} entrées", nb_services);
-    println!("   - Paramètres généraux: {} entrées", nb_parametres);
-    println!("   - Entêtes RAPPORT: {} entrées", nb_entetes_rapport);
-    println!("   - Entêtes AGENT: {} entrées", nb_entetes_agent);
-    println!("   - Entêtes RECOMMANDATION: {} entrées", nb_entetes_reco);
-    println!("   - Entêtes DOSSIER: {} entrées", nb_entetes_dossier);
-    println!("   - Signataires: {} entrées", nb_signataires);
-    println!("   - Permissions: {} entrées", nb_permissions);
-    println!("   - Utilisateur admin créé");
     println!("✅ Base de données initialisée avec succès!");
-
     Ok(conn)
 }
+
 // ==================== COMMANDES AGENTS ====================
 #[tauri::command]
 fn create_agent(state: tauri::State<AppState>, agent: Value) -> Result<i64, String> {
@@ -1039,15 +1051,20 @@ fn get_recommandations(state: tauri::State<AppState>) -> Result<Vec<Value>, Stri
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT r.*, s.NiveauMiseEnOeuvre, s.DateDebut, s.DateFin, s.MesuresCorrectives,
-         s.ObservationDelai, s.ObservationMiseEnOeuvre, s.AppreciationControle,
-         rap.NumeroRapport, rap.LibelleRapport
-         FROM Recommandation r
-         LEFT JOIN SuiviRecommandation s ON r.RecommandationID = s.RecommandationID
-         LEFT JOIN Rapport rap ON r.RapportID = rap.RapportID
-         ORDER BY r.RecommandationID DESC",
+            "SELECT r.*, 
+                s.NiveauMiseEnOeuvre, s.DateDebut, s.DateFin, s.MesuresCorrectives,
+                s.ObservationDelai, s.ObservationMiseEnOeuvre, s.AppreciationControle,
+                s.ReferenceJustificatif, s.FichiersJustificatifs,
+                rap.NumeroRapport, rap.LibelleRapport
+             FROM Recommandation r
+             LEFT JOIN SuiviRecommandation s ON r.RecommandationID = s.RecommandationID
+             LEFT JOIN Rapport rap ON r.RapportID = rap.RapportID
+             ORDER BY r.RecommandationID DESC",
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            println!("❌ Erreur préparation requête: {}", e);
+            e.to_string()
+        })?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -1071,19 +1088,31 @@ fn get_recommandations(state: tauri::State<AppState>) -> Result<Vec<Value>, Stri
                 "ObservationDelai": row.get::<_, Option<String>>(16)?,
                 "ObservationMiseEnOeuvre": row.get::<_, Option<String>>(17)?,
                 "AppreciationControle": row.get::<_, Option<String>>(18)?,
-                "NumeroRapport": row.get::<_, Option<String>>(19)?,
-                "LibelleRapport": row.get::<_, Option<String>>(20)?,
+                "ReferenceJustificatif": row.get::<_, Option<String>>(19)?,
+                "FichiersJustificatifs": row.get::<_, Option<String>>(20)?, // ← Vérifiez cet index
+                "NumeroRapport": row.get::<_, Option<String>>(21)?,
+                "LibelleRapport": row.get::<_, Option<String>>(22)?,
             }))
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            println!("❌ Erreur query_map: {}", e);
+            e.to_string()
+        })?;
 
     let mut result = Vec::new();
     for row in rows {
-        result.push(row.map_err(|e| e.to_string())?);
+        match row {
+            Ok(val) => result.push(val),
+            Err(e) => {
+                println!("❌ Erreur sur une ligne: {}", e);
+                return Err(format!("Erreur lors de la lecture: {}", e));
+            }
+        }
     }
+
+    println!("✅ {} recommandations chargées", result.len());
     Ok(result)
 }
-
 #[tauri::command]
 fn update_recommandation(
     state: tauri::State<AppState>,
@@ -1130,58 +1159,145 @@ fn delete_recommandation(state: tauri::State<AppState>, id: i64) -> Result<(), S
 }
 
 #[tauri::command]
+fn open_rapport_file(file_path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        ShellCommand::new("cmd")
+            .args(&["/C", "start", "", &file_path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        ShellCommand::new("open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        ShellCommand::new("xdg-open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn update_suivi_recommandation(state: tauri::State<AppState>, suivi: Value) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    // Récupérer les valeurs
+    let recommandation_id = suivi["RecommandationID"].as_i64().unwrap_or(0);
+    let mesures_correctives = suivi["MesuresCorrectives"].as_str().unwrap_or("");
+    let date_debut = suivi["DateDebut"].as_str().unwrap_or("");
+    let date_fin = suivi["DateFin"].as_str().unwrap_or("");
+    let niveau = suivi["NiveauMiseEnOeuvre"]
+        .as_str()
+        .unwrap_or("Non commencé");
+    let observation_delai = suivi["ObservationDelai"].as_str().unwrap_or("");
+    let observation_mise_en_oeuvre = suivi["ObservationMiseEnOeuvre"].as_str().unwrap_or("");
+    let appreciation_controle = suivi["AppreciationControle"].as_str().unwrap_or("");
+    let reference_justificatif = suivi["ReferenceJustificatif"].as_str().unwrap_or("");
+    let fichiers_justificatifs = suivi["FichiersJustificatifs"].as_str().unwrap_or("");
 
     // Vérifier si le suivi existe déjà
     let exists: bool = conn
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM SuiviRecommandation WHERE RecommandationID=?1)",
-            [suivi["RecommandationID"].as_i64().unwrap_or(0)],
+            [recommandation_id],
             |row| row.get(0),
         )
         .unwrap_or(false);
 
     if exists {
         conn.execute(
-            "UPDATE SuiviRecommandation SET MesuresCorrectives=?1, DateDebut=?2, DateFin=?3,
-             NiveauMiseEnOeuvre=?4, ObservationDelai=?5, ObservationMiseEnOeuvre=?6,
-             AppreciationControle=?7, ReferenceJustificatif=?8
-             WHERE RecommandationID=?9",
+            "UPDATE SuiviRecommandation SET 
+                MesuresCorrectives=?1, 
+                DateDebut=?2, 
+                DateFin=?3,
+                NiveauMiseEnOeuvre=?4, 
+                ObservationDelai=?5, 
+                ObservationMiseEnOeuvre=?6,
+                AppreciationControle=?7, 
+                ReferenceJustificatif=?8,
+                FichiersJustificatifs=?9
+             WHERE RecommandationID=?10",
             params![
-                suivi["MesuresCorrectives"].as_str().unwrap_or(""),
-                suivi["DateDebut"].as_str().unwrap_or(""),
-                suivi["DateFin"].as_str().unwrap_or(""),
-                suivi["NiveauMiseEnOeuvre"]
-                    .as_str()
-                    .unwrap_or("Non commencé"),
-                suivi["ObservationDelai"].as_str().unwrap_or(""),
-                suivi["ObservationMiseEnOeuvre"].as_str().unwrap_or(""),
-                suivi["AppreciationControle"].as_str().unwrap_or(""),
-                suivi["ReferenceJustificatif"].as_str().unwrap_or(""),
-                suivi["RecommandationID"].as_i64().unwrap_or(0),
+                mesures_correctives,
+                date_debut,
+                date_fin,
+                niveau,
+                observation_delai,
+                observation_mise_en_oeuvre,
+                appreciation_controle,
+                reference_justificatif,
+                fichiers_justificatifs,
+                recommandation_id,
             ],
         )
         .map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "INSERT INTO SuiviRecommandation (RecommandationID, MesuresCorrectives, DateDebut, DateFin,
-             NiveauMiseEnOeuvre, ObservationDelai, ObservationMiseEnOeuvre, AppreciationControle, ReferenceJustificatif)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO SuiviRecommandation (
+                RecommandationID, MesuresCorrectives, DateDebut, DateFin,
+                NiveauMiseEnOeuvre, ObservationDelai, ObservationMiseEnOeuvre, 
+                AppreciationControle, ReferenceJustificatif, FichiersJustificatifs
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
-                suivi["RecommandationID"].as_i64().unwrap_or(0),
-                suivi["MesuresCorrectives"].as_str().unwrap_or(""),
-                suivi["DateDebut"].as_str().unwrap_or(""),
-                suivi["DateFin"].as_str().unwrap_or(""),
-                suivi["NiveauMiseEnOeuvre"].as_str().unwrap_or("Non commencé"),
-                suivi["ObservationDelai"].as_str().unwrap_or(""),
-                suivi["ObservationMiseEnOeuvre"].as_str().unwrap_or(""),
-                suivi["AppreciationControle"].as_str().unwrap_or(""),
-                suivi["ReferenceJustificatif"].as_str().unwrap_or(""),
+                recommandation_id,
+                mesures_correctives,
+                date_debut,
+                date_fin,
+                niveau,
+                observation_delai,
+                observation_mise_en_oeuvre,
+                appreciation_controle,
+                reference_justificatif,
+                fichiers_justificatifs,
             ],
-        ).map_err(|e| e.to_string())?;
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+// Supprimez complètement la fonction upload_justificatif ou corrigez-la ainsi :
+#[tauri::command]
+fn upload_justificatif(
+    state: tauri::State<AppState>,
+    suivi_id: i64,
+    file_content: Vec<u8>,
+    file_name: String,
+) -> Result<String, String> {
+    use std::fs;
+
+    // Solution plus simple : sauvegarder dans le même répertoire
+    let base_path = std::env::temp_dir(); // Utiliser le dossier temp
+    let justificatifs_dir = base_path.join("justificatifs");
+    fs::create_dir_all(&justificatifs_dir).map_err(|e| e.to_string())?;
+
+    let file_path = justificatifs_dir.join(format!("suivi_{}_{}", suivi_id, file_name));
+
+    // Sauvegarder le fichier
+    fs::write(&file_path, file_content).map_err(|e| e.to_string())?;
+
+    let path_str = file_path.to_string_lossy().to_string();
+
+    // Mettre à jour la base de données
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE SuiviRecommandation SET FichiersJustificatifs = ?1 WHERE SuiviID = ?2",
+        params![path_str, suivi_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(path_str)
 }
 
 // ==================== COMMANDES STATISTIQUES ====================
@@ -1731,6 +1847,9 @@ pub fn run() {
             update_rapport,
             delete_rapport,
             get_rapports_list,
+            open_rapport_file,
+            get_app_data_dir,
+            save_rapport_file,
             // Dossiers
             create_dossier,
             get_dossiers,
@@ -1742,6 +1861,8 @@ pub fn run() {
             update_recommandation,
             delete_recommandation,
             update_suivi_recommandation,
+            update_suivi_recommandation,
+            upload_justificatif,
             // Statistiques
             get_statistiques,
             // Grades
@@ -2383,10 +2504,12 @@ fn login(
 ) -> Result<AuthResponse, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
 
-    // Rechercher l'utilisateur par email
+    println!("🔐 Tentative de connexion avec: {}", email);
+
+    // Rechercher l'utilisateur par email OU par nom d'utilisateur
     let user = conn.query_row(
         "SELECT UtilisateurID, NomUtilisateur, Email, MotDePasse, Nom, Prenom, Role, Statut, TentativesConnexion 
-         FROM Utilisateur WHERE Email = ?1 AND Statut = 1",
+         FROM Utilisateur WHERE (Email = ?1 OR NomUtilisateur = ?1) AND Statut = 1",
         [&email],
         |row| {
             Ok((
@@ -2415,6 +2538,8 @@ fn login(
             _statut,
             tentatives,
         )) => {
+            println!("✅ Utilisateur trouvé: {}", nom_utilisateur);
+
             // Vérifier si le compte est bloqué (5 tentatives)
             if tentatives >= 5 {
                 return Ok(AuthResponse {
@@ -2428,6 +2553,8 @@ fn login(
             // Vérifier le mot de passe
             match verify(&password, &hashed_password) {
                 Ok(true) => {
+                    println!("✅ Mot de passe correct");
+
                     // Générer un token
                     let token: String = rand::thread_rng()
                         .sample_iter(&rand::distributions::Alphanumeric)
@@ -2492,6 +2619,8 @@ fn login(
                     })
                 }
                 Ok(false) => {
+                    println!("❌ Mot de passe incorrect");
+
                     // Incrémenter les tentatives
                     conn.execute(
                         "UPDATE Utilisateur SET TentativesConnexion = TentativesConnexion + 1 
@@ -2511,18 +2640,23 @@ fn login(
                         ),
                     })
                 }
-                Err(e) => Err(e.to_string()),
+                Err(e) => {
+                    println!("❌ Erreur de vérification: {}", e);
+                    Err(e.to_string())
+                }
             }
         }
-        Err(_) => Ok(AuthResponse {
-            success: false,
-            token: None,
-            user: None,
-            message: "Email ou mot de passe incorrect".to_string(),
-        }),
+        Err(e) => {
+            println!("❌ Utilisateur non trouvé: {}", e);
+            Ok(AuthResponse {
+                success: false,
+                token: None,
+                user: None,
+                message: "Email ou mot de passe incorrect".to_string(),
+            })
+        }
     }
 }
-
 #[tauri::command]
 fn logout(state: tauri::State<AppState>, token: String) -> Result<bool, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -2800,6 +2934,39 @@ fn delete_user(state: tauri::State<AppState>, token: String, user_id: i64) -> Re
 
     Ok(())
 }
+
+// ==================== COMMANDES POUR LA GESTION DES FICHIERS ====================
+
+#[tauri::command]
+fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let path = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+
+    // Créer le répertoire s'il n'existe pas
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn save_rapport_file(file_path: String, file_content: Vec<u8>) -> Result<String, String> {
+    use std::fs;
+    use std::path::Path;
+
+    // Créer le répertoire parent si nécessaire
+    let path = Path::new(&file_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    // Sauvegarder le fichier
+    fs::write(&file_path, file_content).map_err(|e| e.to_string())?;
+
+    Ok(file_path)
+}
+
 // ==================== POINT D'ENTRÉE PRINCIPAL ====================
 fn main() {
     run();

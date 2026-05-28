@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Tabs, Card, Group, Avatar, Text, Badge, Flex,
-  Button, Container, Stack, Box, Title, 
+  Tabs, Card, Group, Text, Badge, 
+  Button, Container, Stack, Box, 
   Center, Loader
 } from '@mantine/core';
 import {
-  IconDatabase,
   IconRefresh,
   IconUserStar,
   IconGavel,
@@ -17,6 +16,7 @@ import {
 } from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
+import PageHeader from '../components/PageHeader';
 
 // Import des composants modulaires
 import { GradesTab } from '../components/referentiels/GradesTab';
@@ -40,7 +40,7 @@ export default function Referentiels() {
   const [signataires, setSignataires] = useState<Signataire[]>([]);
   const [services, setServices] = useState<ServiceInvestigation[]>([]);
   const [parametres, setParametres] = useState<ParametreGeneral[]>([]);
-  const [enteteDocuments, setEnteteDocuments] = useState<EnteteDocument[]>([]);  // ← MODIFIÉ : tableau simple
+  const [enteteDocuments, setEnteteDocuments] = useState<EnteteDocument[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
 
   // Chargement initial
@@ -140,7 +140,6 @@ export default function Referentiels() {
     setLoading(false);
   };
 
-
   if (loading) {
     return (
       <Center style={{ height: '50vh' }}>
@@ -154,30 +153,47 @@ export default function Referentiels() {
     );
   }
 
+  // Calcul des statistiques pour le sous-titre
+  const totalItems = grades.length + sanctions.length + signataires.length + services.length;
+  const activeTabsCount = 7; // Nombre d'onglets
+
   return (
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header compact */}
-          <Card withBorder radius="md" p="sm" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)' }}>
-            <Flex justify="space-between" align="center" wrap="wrap" gap="md">
-              <Flex gap="md" align="center" wrap="wrap">
-                <Avatar size={40} radius="md" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                  <IconDatabase size={20} color="white" />
-                </Avatar>
-                <Box>
-                  <Title order={3} c="white" size="h4">Configuration des Référentiels</Title>
-                  <Text c="gray.3" size="xs">Gérez les grades, sanctions, signataires et paramètres</Text>
-                </Box>
-              </Flex>
+          {/* Header avec PageHeader */}
+          <PageHeader 
+            title="Configuration des Référentiels"
+            subtitle={`${totalItems} éléments configurés • ${activeTabsCount} catégories`}
+            rightContent={
               <Group gap="xs">
-                <Badge size="sm" variant="white" color="blue">v2.0</Badge>
-                <Button size="xs" variant="light" color="white" leftSection={<IconRefresh size={14} />} onClick={loadAllData} radius="md">
+                <Badge size="md" variant="light" color="white" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                  v2.0
+                </Badge>
+                <Button 
+                  size="sm" 
+                  variant="light" 
+                  color="white" 
+                  leftSection={<IconRefresh size={14} />} 
+                  onClick={loadAllData} 
+                  radius="md"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
+                  }}
+                >
                   Actualiser
                 </Button>
               </Group>
-            </Flex>
-          </Card>
+            }
+          />
 
           {/* Tabs avec composants modulaires */}
           <Card withBorder radius="md" shadow="none" p={0}>
@@ -213,7 +229,7 @@ export default function Referentiels() {
               </Tabs.Panel>
 
               <Tabs.Panel value="entete" p="xs">
-                <EntetesTab enteteDocuments={enteteDocuments} onRefresh={loadEnteteDocuments} />  {/* ← MODIFIÉ */}
+                <EntetesTab enteteDocuments={enteteDocuments} onRefresh={loadEnteteDocuments} />
               </Tabs.Panel>
 
               <Tabs.Panel value="logs" p="xs">
