@@ -65,7 +65,7 @@ export interface Recommandation {
   AppreciationControle?: string;
   NumeroRapport?: string;
   LibelleRapport?: string;
-  FichiersJustificatifs?: string | null; // ✅ CORRECTION : string au lieu de JSX.Element
+  FichiersJustificatifs?: string | null;
 }
 
 interface Rapport {
@@ -158,15 +158,12 @@ export default function Recommandations() {
     }
   };
 
-  // Pour sauvegarder un fichier justificatif
   const saveJustificatif = async (suiviId: number, file: File) => {
     try {
-      // Obtenir le répertoire de l'application
       const appDataDir = await invoke('get_app_data_dir') as string;
       const fileName = `justificatif_${suiviId}_${file.name}`;
       const filePath = `${appDataDir}\\${fileName}`;
 
-      // Convertir le fichier en bytes
       const fileToBytes = (file: File): Promise<number[]> => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -180,71 +177,40 @@ export default function Recommandations() {
       };
 
       const fileBytes = await fileToBytes(file);
-
-      // Sauvegarder le fichier
-      await invoke('save_rapport_file', {
-        filePath: filePath,
-        fileContent: fileBytes
-      });
-
-      // Mettre à jour la base de données avec le chemin
-      await invoke('update_suivi_recommandation', {
-        suivi: {
-          RecommandationID: suiviId,
-          FichiersJustificatifs: filePath
-        }
-      });
-
+      await invoke('save_rapport_file', { filePath: filePath, fileContent: fileBytes });
+      await invoke('update_suivi_recommandation', { suivi: { RecommandationID: suiviId, FichiersJustificatifs: filePath } });
       return filePath;
     } catch (error) {
       console.error('Erreur lors de la sauvegarde du justificatif:', error);
       throw error;
     }
   };
-  // Fonction pour gérer l'upload
+
   const handleUploadJustificatif = async () => {
     if (!justificatifFile || !selectedRecommandation) return;
-
     setUploading(true);
     try {
       await saveJustificatif(selectedRecommandation.RecommandationID, justificatifFile);
-      notifications.show({
-        title: 'Succès',
-        message: 'Justificatif ajouté avec succès',
-        color: 'green',
-        icon: <IconCheck size={16} />
-      });
+      notifications.show({ title: 'Succès', message: 'Justificatif ajouté avec succès', color: 'green', icon: <IconCheck size={16} /> });
       setJustificatifFile(null);
-      loadRecommandations(); // Recharger pour afficher le nouveau fichier
+      loadRecommandations();
     } catch (error) {
-      notifications.show({
-        title: 'Erreur',
-        message: `Erreur lors de l'upload: ${error}`,
-        color: 'red',
-        icon: <IconX size={16} />
-      });
+      notifications.show({ title: 'Erreur', message: `Erreur lors de l'upload: ${error}`, color: 'red', icon: <IconX size={16} /> });
     } finally {
       setUploading(false);
     }
   };
 
-  // Fonction pour ouvrir un justificatif
   const openJustificatif = async (filePath: string) => {
     try {
       await invoke('open_rapport_file', { filePath });
     } catch (error) {
-      notifications.show({
-        title: 'Erreur',
-        message: `Impossible d'ouvrir le fichier: ${error}`,
-        color: 'red',
-        icon: <IconX size={16} />
-      });
+      notifications.show({ title: 'Erreur', message: `Impossible d'ouvrir le fichier: ${error}`, color: 'red', icon: <IconX size={16} /> });
     }
   };
 
   const loadDomainesExistants = async () => {
     try {
-      // Changez 'get_distinct_domaines_from_recommandations' par 'get_distinct_domaines'
       const domaines = await invoke<string[]>('get_distinct_domaines');
       if (domaines && domaines.length > 0) {
         setDomaineOptions(domaines);
@@ -256,36 +222,18 @@ export default function Recommandations() {
       setDomaineOptions([]);
     }
   };
+
   const addNewDomaine = async (nouveauDomaine: string) => {
     if (!nouveauDomaine || nouveauDomaine.trim() === '') return;
-
     const domaineTrimmed = nouveauDomaine.trim();
-
     if (domaineOptions.some(d => d.toLowerCase() === domaineTrimmed.toLowerCase())) {
-      notifications.show({
-        title: 'Domaine existant',
-        message: `"${domaineTrimmed}" existe déjà dans la liste`,
-        color: 'yellow',
-        icon: <IconInfoCircle size={16} />
-      });
+      notifications.show({ title: 'Domaine existant', message: `"${domaineTrimmed}" existe déjà dans la liste`, color: 'yellow', icon: <IconInfoCircle size={16} /> });
       return;
     }
-
     try {
-      try {
-        await invoke('add_domaine', { domaine: domaineTrimmed });
-      } catch {
-        console.log('Table domaines non disponible');
-      }
-
+      try { await invoke('add_domaine', { domaine: domaineTrimmed }); } catch { console.log('Table domaines non disponible'); }
       setDomaineOptions(prev => [...prev, domaineTrimmed]);
-
-      notifications.show({
-        title: 'Nouveau domaine ajouté',
-        message: `"${domaineTrimmed}" a été ajouté aux options`,
-        color: 'green',
-        icon: <IconCheck size={16} />
-      });
+      notifications.show({ title: 'Nouveau domaine ajouté', message: `"${domaineTrimmed}" a été ajouté aux options`, color: 'green', icon: <IconCheck size={16} /> });
     } catch (error) {
       console.error('Erreur lors de l\'ajout du domaine:', error);
       setDomaineOptions(prev => [...prev, domaineTrimmed]);
@@ -295,22 +243,17 @@ export default function Recommandations() {
   const handleSubmit = async (values: typeof form.values) => {
     try {
       if (values.Domaine && values.Domaine.trim() !== '') {
-        const domaineExists = domaineOptions.some(
-          option => option.toLowerCase() === values.Domaine.toLowerCase()
-        );
-
+        const domaineExists = domaineOptions.some(option => option.toLowerCase() === values.Domaine.toLowerCase());
         if (!domaineExists) {
           setDomaineOptions(prev => [...prev, values.Domaine.trim()]);
         }
       }
-
       const recommandationData = {
         ...values,
         RapportID: parseInt(values.RapportID),
         Echeance: values.Echeance || null,
         RecommandationID: editingId,
       };
-
       if (editingId) {
         await invoke('update_recommandation', { recommandation: recommandationData });
         notifications.show({ title: 'Succès', message: 'Recommandation modifiée', color: 'green', icon: <IconCheck size={16} /> });
@@ -318,7 +261,6 @@ export default function Recommandations() {
         await invoke('create_recommandation', { recommandation: recommandationData });
         notifications.show({ title: 'Succès', message: 'Recommandation créée', color: 'green', icon: <IconCheck size={16} /> });
       }
-
       setModalOpen(false);
       form.reset();
       setCurrentDomaineInput('');
@@ -332,7 +274,6 @@ export default function Recommandations() {
 
   const handleUpdateSuivi = async () => {
     if (!selectedRecommandation) return;
-
     try {
       const suiviData = {
         ...suiviForm.values,
@@ -340,7 +281,6 @@ export default function Recommandations() {
         DateDebut: suiviForm.values.DateDebut ? dayjs(suiviForm.values.DateDebut).format('YYYY-MM-DD') : null,
         DateFin: suiviForm.values.DateFin ? dayjs(suiviForm.values.DateFin).format('YYYY-MM-DD') : null,
       };
-
       await invoke('update_suivi_recommandation', { suivi: suiviData });
       notifications.show({ title: 'Succès', message: 'Suivi mis à jour', color: 'green', icon: <IconCheck size={16} /> });
       setSuiviModalOpen(false);
@@ -410,7 +350,6 @@ export default function Recommandations() {
         defaultPath: `recommandations_${dayjs().format('YYYY-MM-DD_HH-mm')}.xlsx`
       });
       if (!filePath) { setExporting(false); return; }
-
       const data = filteredRecommandations.map(rec => ({
         'ID': rec.RecommandationID,
         'Numéro': rec.NumeroRecommandation || '',
@@ -421,7 +360,6 @@ export default function Recommandations() {
         'Statut': rec.NiveauMiseEnOeuvre || 'Non commencé',
         'Domaine': rec.Domaine || '',
       }));
-
       const ws = XLSX.utils.json_to_sheet(data);
       ws['!cols'] = [{ wch: 8 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
       const wb = XLSX.utils.book_new();
@@ -444,7 +382,6 @@ export default function Recommandations() {
         defaultPath: `recommandations_${dayjs().format('YYYY-MM-DD_HH-mm')}.pdf`
       });
       if (!filePath) { setExporting(false); return; }
-
       const doc = new jsPDF('landscape', 'mm', 'a4');
       doc.setFillColor(27, 54, 93);
       doc.rect(0, 0, 297, 40, 'F');
@@ -456,7 +393,6 @@ export default function Recommandations() {
       doc.setTextColor(0, 0, 0);
       doc.text(`Total recommandations : ${filteredRecommandations.length}`, 14, 50);
       doc.text(`Taux de réalisation : ${getTauxRealisation().toFixed(1)}%`, 14, 57);
-
       const head = ['N°', 'Numéro', 'Recommandation', 'Rapport', 'Responsable', 'Échéance', 'Statut'];
       const body = filteredRecommandations.map((rec, idx) => [
         (idx + 1).toString(),
@@ -467,16 +403,7 @@ export default function Recommandations() {
         rec.Echeance || '',
         rec.NiveauMiseEnOeuvre || 'Non commencé'
       ]);
-
-      autoTable(doc, {
-        head: [head],
-        body: body as any[],
-        startY: 65,
-        theme: 'striped',
-        headStyles: { fillColor: [27, 54, 93], textColor: 255, fontStyle: 'bold', halign: 'center' },
-        styles: { fontSize: 8, cellPadding: 2 }
-      });
-
+      autoTable(doc, { head: [head], body: body as any[], startY: 65, theme: 'striped', headStyles: { fillColor: [27, 54, 93], textColor: 255, fontStyle: 'bold', halign: 'center' }, styles: { fontSize: 8, cellPadding: 2 } });
       await writeFile(filePath, new Uint8Array(doc.output('arraybuffer')));
       notifications.show({ title: 'Succès', message: 'Export PDF réussi !', color: 'green', icon: <IconCheck size={16} /> });
     } catch (error) {
@@ -495,7 +422,6 @@ export default function Recommandations() {
         defaultPath: `recommandations_${dayjs().format('YYYY-MM-DD_HH-mm')}.doc`
       });
       if (!filePath) { setExporting(false); return; }
-
       const rows = filteredRecommandations.map((rec, idx) => `
         <tr>
           <td style="border:1px solid #ddd;padding:8px;text-align:center">${idx + 1}</td>
@@ -507,7 +433,6 @@ export default function Recommandations() {
           <td style="border:1px solid #ddd;padding:8px">${rec.NiveauMiseEnOeuvre || 'Non commencé'}</td>
         </tr>
       `).join('');
-
       const htmlContent = `<!DOCTYPE html>
       <html>
       <head><meta charset="UTF-8"><title>Liste des recommandations</title>
@@ -527,7 +452,6 @@ export default function Recommandations() {
         <table><thead><tr><th>N°</th><th>Numéro</th><th>Recommandation</th><th>Rapport</th><th>Responsable</th><th>Échéance</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table>
       </body>
       </html>`;
-
       await writeFile(filePath, new TextEncoder().encode(htmlContent));
       notifications.show({ title: 'Succès', message: 'Export Word réussi !', color: 'green', icon: <IconCheck size={16} /> });
     } catch (error) {
@@ -548,25 +472,10 @@ export default function Recommandations() {
       <td>${rec.Echeance || '-'}</td>
       <td>${rec.NiveauMiseEnOeuvre || 'Non commencé'}</td>
     </tr>
-  `).join('');
-
-    const content = `
-    <table style="width:100%; border-collapse: collapse;">
-      <thead>
-        <tr style="background:#1b365d;color:white;">
-          <th>N°</th>
-          <th>Numéro</th>
-          <th>Recommandation</th>
-          <th>Rapport</th>
-          <th>Responsable</th>
-          <th>Échéance</th>
-          <th>Statut</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
-  `;
-
+    `).join('');
+    const content = `<table style="width:100%; border-collapse: collapse;">
+      <thead><tr style="background:#1b365d;color:white;"><th>N°</th><th>Numéro</th><th>Recommandation</th><th>Rapport</th><th>Responsable</th><th>Échéance</th><th>Statut</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
     printDocument(content, 'LISTE DES RECOMMANDATIONS', orientation);
   };
 
@@ -613,36 +522,10 @@ export default function Recommandations() {
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* En-tête avec PageHeader */}
-<PageHeader 
-  title="Gestion des Recommandations"
-  subtitle={`${recommandations.length} recommandations • Taux de réalisation : ${getTauxRealisation().toFixed(1)}%`}
-  rightContent={
-    <Button 
-      variant="light" 
-      color="white" 
-      leftSection={<IconInfoCircle size={18} />} 
-      onClick={() => setInfoModalOpen(true)}
-      style={{
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.2)',
-        transition: 'all 0.3s ease'
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
-        e.currentTarget.style.transform = 'translateY(-2px)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
-        e.currentTarget.style.transform = 'translateY(0)';
-      }}
-    >
-      Instructions
-    </Button>
-  }
-/>
+          {/* En-tête avec PageHeader - sans rightContent */}
+          <PageHeader title="Bienvenue dans la page de Gestion des Recommandations" />
 
+          {/* Cartes statistiques */}
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
             {(styles) => (
               <div style={styles}>
@@ -651,22 +534,41 @@ export default function Recommandations() {
             )}
           </Transition>
 
-          {/* Barre d'actions */}
+          {/* Filtres et Boutons sur la même ligne */}
           <Card withBorder radius="lg" shadow="sm" p="md">
-            <Group justify="space-between" align="flex-end" mb="md">
-              <Box>
-                <Text fw={600} size="lg">Liste des recommandations</Text>
-                <Text size="xs" c="dimmed">{filteredRecommandations.length} recommandation(s) trouvée(s)</Text>
-              </Box>
-              <Group>
+            <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
+              {/* Filtres à gauche */}
+              <Group grow style={{ flex: 2 }}>
+                <TextInput
+                  placeholder="Rechercher par numéro ou texte..."
+                  leftSection={<IconSearch size={16} />}
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.currentTarget.value); setActivePage(1); }}
+                  size="sm"
+                />
+                <Select
+                  placeholder="Filtrer par statut"
+                  value={filterStatut}
+                  onChange={(val) => { setFilterStatut(val); setActivePage(1); }}
+                  clearable
+                  data={statutOptions}
+                  size="sm"
+                />
+              </Group>
+
+              {/* Boutons d'action à droite */}
+              <Group gap="sm" align="flex-end">
                 <Tooltip label="Actualiser">
                   <ActionIcon onClick={loadRecommandations} size="lg" variant="light" color="blue">
                     <IconRefresh size={18} />
                   </ActionIcon>
                 </Tooltip>
+
                 <Menu shadow="md" width={200} position="bottom-end">
                   <Menu.Target>
-                    <Button leftSection={<IconDownload size={16} />} variant="outline" loading={exporting}>Exporter</Button>
+                    <Button leftSection={<IconDownload size={16} />} variant="outline" loading={exporting}>
+                      Exporter
+                    </Button>
                   </Menu.Target>
                   <Menu.Dropdown>
                     <Menu.Label>Format d'export</Menu.Label>
@@ -675,6 +577,7 @@ export default function Recommandations() {
                     <Menu.Item leftSection={<IconFileWord size={16} color="#2980b9" />} onClick={exportToWord}>Word (.doc)</Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
+
                 <Menu shadow="md" width={160}>
                   <Menu.Target>
                     <Tooltip label="Imprimer">
@@ -688,45 +591,46 @@ export default function Recommandations() {
                     <Menu.Item onClick={() => handlePrint('landscape')}>📄 Paysage</Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
-                <Button leftSection={<IconPlus size={16} />} onClick={() => { setEditingId(null); form.reset(); setCurrentDomaineInput(''); setModalOpen(true); }} variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}>
+
+                <Button 
+                  leftSection={<IconPlus size={16} />} 
+                  onClick={() => { setEditingId(null); form.reset(); setCurrentDomaineInput(''); setModalOpen(true); }} 
+                  variant="gradient" 
+                  gradient={{ from: '#1b365d', to: '#2a4a7a' }}
+                >
                   Nouvelle Recommandation
                 </Button>
+
+                <Tooltip label="Instructions">
+                  <ActionIcon 
+                    onClick={() => setInfoModalOpen(true)} 
+                    size="lg" 
+                    variant="light" 
+                    color="gray"
+                  >
+                    <IconInfoCircle size={18} />
+                  </ActionIcon>
+                </Tooltip>
               </Group>
             </Group>
 
             <Divider my="md" />
 
-            <Grid>
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  placeholder="Rechercher par numéro ou texte..."
-                  leftSection={<IconSearch size={16} />}
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.currentTarget.value); setActivePage(1); }}
-                  size="sm"
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Select
-                  placeholder="Filtrer par statut"
-                  value={filterStatut}
-                  onChange={(val) => { setFilterStatut(val); setActivePage(1); }}
-                  clearable
-                  data={statutOptions}
-                  size="sm"
-                />
-              </Grid.Col>
-            </Grid>
+            {/* Résumé des filtres */}
+            {(searchTerm || filterStatut) && (
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">{filteredRecommandations.length} recommandation(s) trouvée(s)</Text>
+                <Button variant="subtle" size="xs" onClick={() => { setSearchTerm(''); setFilterStatut(null); }}>
+                  Effacer les filtres
+                </Button>
+              </Group>
+            )}
           </Card>
 
-          {/* Tableau */}
+          {/* Tableau - le reste du code identique à partir d'ici */}
           <Card withBorder radius="lg" shadow="sm" p="0" style={{ overflow: 'hidden' }}>
             <ScrollArea style={{ maxHeight: 500 }}>
-              <Table
-                striped
-                highlightOnHover
-                style={{ fontSize: '11px', minWidth: '1200px' }}
-              >
+              <Table striped highlightOnHover style={{ fontSize: '11px', minWidth: '1200px' }}>
                 <Table.Thead style={{ backgroundColor: '#1b365d' }}>
                   <Table.Tr>
                     <Table.Th style={{ color: 'white', width: '70px', fontSize: '11px', padding: '8px 4px' }}>N°</Table.Th>
@@ -763,20 +667,7 @@ export default function Recommandations() {
                           </Stack>
                         </Table.Td>
                         <Table.Td style={{ padding: '6px 4px' }}>
-                          <Tooltip
-                            label={
-                              <Stack gap={4} p="xs">
-                                <Text fw={700} size="sm">Détails du rapport :</Text>
-                                <Text size="xs">📄 Numéro: {rec.NumeroRapport || 'Non défini'}</Text>
-                                {rec.LibelleRapport && <Text size="xs">📝 Libellé: {rec.LibelleRapport}</Text>}
-                                <Text size="xs">🔗 ID: {rec.RapportID || '-'}</Text>
-                              </Stack>
-                            }
-                            withArrow
-                            position="bottom"
-                            w={300}
-                            multiline
-                          >
+                          <Tooltip label={<Stack gap={4} p="xs"><Text fw={700} size="sm">Détails du rapport :</Text><Text size="xs">📄 Numéro: {rec.NumeroRapport || 'Non défini'}</Text>{rec.LibelleRapport && <Text size="xs">📝 Libellé: {rec.LibelleRapport}</Text>}<Text size="xs">🔗 ID: {rec.RapportID || '-'}</Text></Stack>} withArrow position="bottom" w={300} multiline>
                             <Paper p="xs" bg="gray.0" radius="md" withBorder style={{ cursor: 'pointer' }}>
                               <Stack gap={2}>
                                 <Group gap={4} wrap="nowrap">
@@ -810,49 +701,10 @@ export default function Recommandations() {
                         </Table.Td>
                         <Table.Td style={{ padding: '6px 4px' }}>
                           <Group justify="center" gap={4} wrap="nowrap">
-                            <Tooltip label="Voir détails">
-                              <ActionIcon onClick={() => handleView(rec)} color="green" variant="light" size="sm">
-                                <IconEye size={16} />
-                              </ActionIcon>
-                            </Tooltip>
-                            <Tooltip label="Modifier">
-                              <ActionIcon
-                                onClick={() => {
-                                  setEditingId(rec.RecommandationID);
-                                  setCurrentDomaineInput(rec.Domaine || '');
-                                  form.setValues({
-                                    Services: rec.Services || '',
-                                    Source: rec.Source || '',
-                                    RapportID: rec.RapportID?.toString() || '',
-                                    ProblemeFaiblesse: rec.ProblemeFaiblesse || '',
-                                    NumeroRecommandation: rec.NumeroRecommandation || '',
-                                    TexteRecommandation: rec.TexteRecommandation || '',
-                                    ResponsableMiseEnOeuvre: rec.ResponsableMiseEnOeuvre || '',
-                                    ActeursImpliques: rec.ActeursImpliques || '',
-                                    InstanceValidation: rec.InstanceValidation || '',
-                                    Echeance: rec.Echeance || '',
-                                    Domaine: rec.Domaine || '',
-                                  });
-                                  setModalOpen(true);
-                                }}
-                                color="orange" variant="light" size="sm"
-                              >
-                                <IconEdit size={16} />
-                              </ActionIcon>
-                            </Tooltip>
-                            <Tooltip label="Suivi">
-                              <ActionIcon onClick={() => openSuiviModal(rec)} color="blue" variant="light" size="sm">
-                                <IconEdit size={16} />
-                              </ActionIcon>
-                            </Tooltip>
-                            <Tooltip label="Supprimer">
-                              <ActionIcon
-                                onClick={() => { setRecommandationToDelete(rec.RecommandationID); setDeleteModalOpen(true); }}
-                                color="red" variant="light" size="sm"
-                              >
-                                <IconTrash size={16} />
-                              </ActionIcon>
-                            </Tooltip>
+                            <Tooltip label="Voir détails"><ActionIcon onClick={() => handleView(rec)} color="green" variant="light" size="sm"><IconEye size={16} /></ActionIcon></Tooltip>
+                            <Tooltip label="Modifier"><ActionIcon onClick={() => { setEditingId(rec.RecommandationID); setCurrentDomaineInput(rec.Domaine || ''); form.setValues({ Services: rec.Services || '', Source: rec.Source || '', RapportID: rec.RapportID?.toString() || '', ProblemeFaiblesse: rec.ProblemeFaiblesse || '', NumeroRecommandation: rec.NumeroRecommandation || '', TexteRecommandation: rec.TexteRecommandation || '', ResponsableMiseEnOeuvre: rec.ResponsableMiseEnOeuvre || '', ActeursImpliques: rec.ActeursImpliques || '', InstanceValidation: rec.InstanceValidation || '', Echeance: rec.Echeance || '', Domaine: rec.Domaine || '' }); setModalOpen(true); }} color="orange" variant="light" size="sm"><IconEdit size={16} /></ActionIcon></Tooltip>
+                            <Tooltip label="Suivi"><ActionIcon onClick={() => openSuiviModal(rec)} color="blue" variant="light" size="sm"><IconEdit size={16} /></ActionIcon></Tooltip>
+                            <Tooltip label="Supprimer"><ActionIcon onClick={() => { setRecommandationToDelete(rec.RecommandationID); setDeleteModalOpen(true); }} color="red" variant="light" size="sm"><IconTrash size={16} /></ActionIcon></Tooltip>
                           </Group>
                         </Table.Td>
                       </Table.Tr>
@@ -871,383 +723,79 @@ export default function Recommandations() {
         </Stack>
       </Container>
 
-      {/* Modal Formulaire */}
-      <Modal
-        opened={modalOpen}
-        onClose={() => { setModalOpen(false); form.reset(); setCurrentDomaineInput(''); }}
-        title={<Text fw={600} size="md">{editingId ? "Modifier la Recommandation" : "Nouvelle Recommandation"}</Text>}
-        size="xl"
-        centered
-        scrollAreaComponent={ScrollArea.Autosize}
-        styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}
-      >
+      {/* Modal Formulaire - reste identique */}
+      <Modal opened={modalOpen} onClose={() => { setModalOpen(false); form.reset(); setCurrentDomaineInput(''); }} title={<Text fw={600} size="md">{editingId ? "Modifier la Recommandation" : "Nouvelle Recommandation"}</Text>} size="xl" centered scrollAreaComponent={ScrollArea.Autosize} styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}>
         <form onSubmit={form.onSubmit(handleSubmit)}>
           <Stack gap="md">
-            <Select
-              label="Rapport d'inspection"
-              placeholder="Sélectionner un rapport"
-              data={rapportOptions}
-              {...form.getInputProps('RapportID')}
-              required searchable size="md"
-            />
-
-            <TextInput
-              label="Problème / Faiblesse identifié(e)"
-              placeholder="Description du problème"
-              {...form.getInputProps('ProblemeFaiblesse')}
-              size="md"
-            />
-
+            <Select label="Rapport d'inspection" placeholder="Sélectionner un rapport" data={rapportOptions} {...form.getInputProps('RapportID')} required searchable size="md" />
+            <TextInput label="Problème / Faiblesse identifié(e)" placeholder="Description du problème" {...form.getInputProps('ProblemeFaiblesse')} size="md" />
             <Grid>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Numéro de recommandation"
-                  placeholder="Ex: REC-001"
-                  {...form.getInputProps('NumeroRecommandation')}
-                  size="md"
-                />
-              </Grid.Col>
+              <Grid.Col span={6}><TextInput label="Numéro de recommandation" placeholder="Ex: REC-001" {...form.getInputProps('NumeroRecommandation')} size="md" /></Grid.Col>
               <Grid.Col span={6}>
                 <Group align="flex-end" gap="xs">
-                  <div style={{ flex: 1 }}>
-                    <Autocomplete
-                      label="Domaine"
-                      placeholder="Sélectionner ou saisir un domaine"
-                      data={domaineOptions}
-                      {...form.getInputProps('Domaine')}
-                      size="md"
-                      onChange={(value) => { form.setFieldValue('Domaine', value); setCurrentDomaineInput(value); }}
-                    />
-                  </div>
-                  {currentDomaineInput && currentDomaineInput !== form.values.Domaine && !domaineOptions.includes(currentDomaineInput) && (
-                    <Button size="sm" variant="light" color="green" onClick={() => { addNewDomaine(currentDomaineInput); form.setFieldValue('Domaine', currentDomaineInput); setCurrentDomaineInput(''); }}>
-                      <IconPlus size={16} /> Ajouter
-                    </Button>
-                  )}
+                  <div style={{ flex: 1 }}><Autocomplete label="Domaine" placeholder="Sélectionner ou saisir un domaine" data={domaineOptions} {...form.getInputProps('Domaine')} size="md" onChange={(value) => { form.setFieldValue('Domaine', value); setCurrentDomaineInput(value); }} /></div>
+                  {currentDomaineInput && currentDomaineInput !== form.values.Domaine && !domaineOptions.includes(currentDomaineInput) && (<Button size="sm" variant="light" color="green" onClick={() => { addNewDomaine(currentDomaineInput); form.setFieldValue('Domaine', currentDomaineInput); setCurrentDomaineInput(''); }}><IconPlus size={16} /> Ajouter</Button>)}
                 </Group>
               </Grid.Col>
-              <Grid.Col span={12}>
-                <Textarea
-                  label="Texte de la recommandation"
-                  placeholder="Décrire la recommandation..."
-                  rows={3}
-                  {...form.getInputProps('TexteRecommandation')}
-                  required size="md"
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Responsable mise en œuvre"
-                  placeholder="Nom du responsable"
-                  {...form.getInputProps('ResponsableMiseEnOeuvre')}
-                  size="md"
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Select
-                  label="Échéance"
-                  placeholder="Sélectionner le délai"
-                  data={[
-                    { value: 'Immédiat', label: 'Immédiat (0-3 mois)' },
-                    { value: 'Court terme', label: 'Court terme (3-6 mois)' },
-                    { value: 'Moyen terme', label: 'Moyen terme (6-12 mois)' },
-                    { value: 'Long terme', label: 'Long terme (> 12 mois)' }
-                  ]}
-                  {...form.getInputProps('Echeance')}
-                  size="md"
-                />
-              </Grid.Col>
-              <Grid.Col span={12}>
-                <TextInput
-                  label="Acteurs impliqués"
-                  placeholder="Liste des acteurs"
-                  {...form.getInputProps('ActeursImpliques')}
-                  size="md"
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Instance de validation"
-                  {...form.getInputProps('InstanceValidation')}
-                  size="md"
-                />
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <TextInput
-                  label="Services concernés"
-                  {...form.getInputProps('Services')}
-                  size="md"
-                />
-              </Grid.Col>
+              <Grid.Col span={12}><Textarea label="Texte de la recommandation" placeholder="Décrire la recommandation..." rows={3} {...form.getInputProps('TexteRecommandation')} required size="md" /></Grid.Col>
+              <Grid.Col span={6}><TextInput label="Responsable mise en œuvre" placeholder="Nom du responsable" {...form.getInputProps('ResponsableMiseEnOeuvre')} size="md" /></Grid.Col>
+              <Grid.Col span={6}><Select label="Échéance" placeholder="Sélectionner le délai" data={[{ value: 'Immédiat', label: 'Immédiat (0-3 mois)' }, { value: 'Court terme', label: 'Court terme (3-6 mois)' }, { value: 'Moyen terme', label: 'Moyen terme (6-12 mois)' }, { value: 'Long terme', label: 'Long terme (> 12 mois)' }]} {...form.getInputProps('Echeance')} size="md" /></Grid.Col>
+              <Grid.Col span={12}><TextInput label="Acteurs impliqués" placeholder="Liste des acteurs" {...form.getInputProps('ActeursImpliques')} size="md" /></Grid.Col>
+              <Grid.Col span={6}><TextInput label="Instance de validation" {...form.getInputProps('InstanceValidation')} size="md" /></Grid.Col>
+              <Grid.Col span={6}><TextInput label="Services concernés" {...form.getInputProps('Services')} size="md" /></Grid.Col>
             </Grid>
-
-            <Group justify="flex-end">
-              <Button variant="subtle" onClick={() => { setModalOpen(false); form.reset(); setCurrentDomaineInput(''); }}>Annuler</Button>
-              <Button type="submit">{editingId ? 'Modifier' : 'Créer'}</Button>
-            </Group>
+            <Group justify="flex-end"><Button variant="subtle" onClick={() => { setModalOpen(false); form.reset(); setCurrentDomaineInput(''); }}>Annuler</Button><Button type="submit">{editingId ? 'Modifier' : 'Créer'}</Button></Group>
           </Stack>
         </form>
       </Modal>
 
       {/* Modal Suivi */}
-      <Modal
-        opened={suiviModalOpen}
-        onClose={() => {
-          setSuiviModalOpen(false);
-          setSelectedRecommandation(null);
-          setJustificatifFile(null); // Nettoyer
-        }}
-        title={<Text fw={600} size="md">Suivi de la recommandation</Text>}
-        size="xl"
-        centered
-        scrollAreaComponent={ScrollArea.Autosize}
-        styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}
-      >
+      <Modal opened={suiviModalOpen} onClose={() => { setSuiviModalOpen(false); setSelectedRecommandation(null); setJustificatifFile(null); }} title={<Text fw={600} size="md">Suivi de la recommandation</Text>} size="xl" centered scrollAreaComponent={ScrollArea.Autosize} styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}>
         {selectedRecommandation && (
           <form onSubmit={suiviForm.onSubmit(handleUpdateSuivi)}>
             <Stack gap="md">
-              <Card withBorder bg="blue.0" p="md">
-                <Text fw={600} size="sm" mb="xs">📌 {selectedRecommandation.NumeroRecommandation || `Recommandation ${selectedRecommandation.RecommandationID}`}</Text>
-                <Text size="sm">{selectedRecommandation.TexteRecommandation}</Text>
-                <Divider my="sm" />
-                <Group gap="md">
-                  <Text size="xs" c="dimmed">Rapport: <strong>{selectedRecommandation.NumeroRapport}</strong></Text>
-                  <Text size="xs" c="dimmed">Responsable: <strong>{selectedRecommandation.ResponsableMiseEnOeuvre || 'Non défini'}</strong></Text>
-                  <Text size="xs" c="dimmed">Échéance: <strong>{selectedRecommandation.Echeance || 'Non définie'}</strong></Text>
-                </Group>
-              </Card>
-
-              <Select
-                label="Niveau de mise en œuvre"
-                data={['Non commencé', 'En cours', 'Partiellement réalisée', 'Réalisée', 'Abandonnée']}
-                {...suiviForm.getInputProps('NiveauMiseEnOeuvre')}
-                size="md"
-              />
-
-              <Grid>
-                <Grid.Col span={6}>
-                  <DateInput label="Date de début" placeholder="Début des actions" {...suiviForm.getInputProps('DateDebut')} size="md" />
-                </Grid.Col>
-                <Grid.Col span={6}>
-                  <DateInput label="Date de fin" placeholder="Fin prévue" {...suiviForm.getInputProps('DateFin')} size="md" />
-                </Grid.Col>
-              </Grid>
-
-              {/* Mesures correctives et Justificatifs sur la même ligne */}
-              <Grid>
-                <Grid.Col span={6}>
-                  <Textarea
-                    label="Mesures correctives prises"
-                    placeholder="Décrire les actions entreprises..."
-                    rows={3}
-                    {...suiviForm.getInputProps('MesuresCorrectives')}
-                    size="md"
-                  />
-                </Grid.Col>
-                <Grid.Col span={6}>
-                  <Stack gap="xs">
-                    <Text size="sm" fw={500}>📎 Importer la pièce justificative</Text>
-
-                    {/* Upload de nouveau justificatif */}
-                    <FileInput
-                      placeholder="Sélectionner un fichier (PDF, DOC, JPG, PNG)"
-                      value={justificatifFile}
-                      onChange={setJustificatifFile}
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      size="md"
-                      radius="md"
-                      leftSection={<IconFile size={16} />}
-                      clearable
-                    />
-
-                    {justificatifFile && (
-                      <Button
-                        size="sm"
-                        onClick={handleUploadJustificatif}
-                        loading={uploading}
-                        leftSection={<IconUpload size={16} />}
-                        fullWidth
-                      >
-                        Télécharger la pièce justificative
-                      </Button>
-                    )}
-
-                    {/* Afficher les justificatifs existants */}
-                    {selectedRecommandation.FichiersJustificatifs && (
-                      <Paper withBorder p="sm" radius="md" bg="gray.0" mt="xs">
-                        <Text size="xs" c="dimmed" mb="xs">Justificatif existant :</Text>
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          leftSection={<IconEye size={14} />}
-                          onClick={() => openJustificatif(selectedRecommandation.FichiersJustificatifs as string)}
-                          fullWidth
-                        >
-                          {typeof selectedRecommandation.FichiersJustificatifs === 'string'
-                            ? (() => {
-                              const path = selectedRecommandation.FichiersJustificatifs as string;
-                              const parts = path.split(/[\\/]/);
-                              return parts[parts.length - 1] || 'Voir le justificatif';
-                            })()
-                            : 'Voir le justificatif'}
-                        </Button>
-                      </Paper>
-                    )}
-                  </Stack>
-                </Grid.Col>
-              </Grid>
-
+              <Card withBorder bg="blue.0" p="md"><Text fw={600} size="sm" mb="xs">📌 {selectedRecommandation.NumeroRecommandation || `Recommandation ${selectedRecommandation.RecommandationID}`}</Text><Text size="sm">{selectedRecommandation.TexteRecommandation}</Text><Divider my="sm" /><Group gap="md"><Text size="xs" c="dimmed">Rapport: <strong>{selectedRecommandation.NumeroRapport}</strong></Text><Text size="xs" c="dimmed">Responsable: <strong>{selectedRecommandation.ResponsableMiseEnOeuvre || 'Non défini'}</strong></Text><Text size="xs" c="dimmed">Échéance: <strong>{selectedRecommandation.Echeance || 'Non définie'}</strong></Text></Group></Card>
+              <Select label="Niveau de mise en œuvre" data={['Non commencé', 'En cours', 'Partiellement réalisée', 'Réalisée', 'Abandonnée']} {...suiviForm.getInputProps('NiveauMiseEnOeuvre')} size="md" />
+              <Grid><Grid.Col span={6}><DateInput label="Date de début" placeholder="Début des actions" {...suiviForm.getInputProps('DateDebut')} size="md" /></Grid.Col><Grid.Col span={6}><DateInput label="Date de fin" placeholder="Fin prévue" {...suiviForm.getInputProps('DateFin')} size="md" /></Grid.Col></Grid>
+              <Grid><Grid.Col span={6}><Textarea label="Mesures correctives prises" placeholder="Décrire les actions entreprises..." rows={3} {...suiviForm.getInputProps('MesuresCorrectives')} size="md" /></Grid.Col><Grid.Col span={6}><Stack gap="xs"><Text size="sm" fw={500}>📎 Importer la pièce justificative</Text><FileInput placeholder="Sélectionner un fichier (PDF, DOC, JPG, PNG)" value={justificatifFile} onChange={setJustificatifFile} accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" size="md" radius="md" leftSection={<IconFile size={16} />} clearable />{justificatifFile && (<Button size="sm" onClick={handleUploadJustificatif} loading={uploading} leftSection={<IconUpload size={16} />} fullWidth>Télécharger la pièce justificative</Button>)}{selectedRecommandation.FichiersJustificatifs && (<Paper withBorder p="sm" radius="md" bg="gray.0" mt="xs"><Text size="xs" c="dimmed" mb="xs">Justificatif existant :</Text><Button size="xs" variant="subtle" leftSection={<IconEye size={14} />} onClick={() => openJustificatif(selectedRecommandation.FichiersJustificatifs as string)} fullWidth>{typeof selectedRecommandation.FichiersJustificatifs === 'string' ? (() => { const path = selectedRecommandation.FichiersJustificatifs as string; const parts = path.split(/[\\/]/); return parts[parts.length - 1] || 'Voir le justificatif'; })() : 'Voir le justificatif'}</Button></Paper>)}</Stack></Grid.Col></Grid>
               <Textarea label="Observation sur les délais" placeholder="Respect des délais, retards, etc." rows={2} {...suiviForm.getInputProps('ObservationDelai')} size="md" />
               <Textarea label="Observation sur la mise en œuvre" placeholder="Difficultés rencontrées, succès, etc." rows={2} {...suiviForm.getInputProps('ObservationMiseEnOeuvre')} size="md" />
               <Select label="Appréciation du contrôle" data={['Excellent', 'Bon', 'Satisfaisant', 'Insuffisant', 'Critique']} {...suiviForm.getInputProps('AppreciationControle')} size="md" />
-
-              <Group justify="flex-end" mt="md">
-                <Button variant="subtle" onClick={() => setSuiviModalOpen(false)}>Annuler</Button>
-                <Button type="submit" variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}>
-                  Enregistrer le suivi
-                </Button>
-              </Group>
+              <Group justify="flex-end" mt="md"><Button variant="subtle" onClick={() => setSuiviModalOpen(false)}>Annuler</Button><Button type="submit" variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}>Enregistrer le suivi</Button></Group>
             </Stack>
           </form>
         )}
       </Modal>
 
       {/* Modal Visualisation */}
-      <Modal
-        opened={viewModalOpen}
-        onClose={() => setViewModalOpen(false)}
-        title={<Text fw={600} size="md">Détails de la Recommandation</Text>}
-        size="xl"
-        centered
-        scrollAreaComponent={ScrollArea.Autosize}
-        styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}
-      >
+      <Modal opened={viewModalOpen} onClose={() => setViewModalOpen(false)} title={<Text fw={600} size="md">Détails de la Recommandation</Text>} size="xl" centered scrollAreaComponent={ScrollArea.Autosize} styles={{ body: { maxHeight: '75vh', overflowY: 'auto', padding: 16 } }}>
         {selectedRecommandation && (
           <Stack gap="md">
-            <Card withBorder radius="md" p="sm" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)', color: 'white' }}>
-              <Group justify="space-between">
-                <Badge color="blue" size="lg" variant="white">{selectedRecommandation.NumeroRecommandation || `REC-${selectedRecommandation.RecommandationID}`}</Badge>
-                <Badge color={getNiveauColor(selectedRecommandation.NiveauMiseEnOeuvre)} variant="filled" size="lg">
-                  {selectedRecommandation.NiveauMiseEnOeuvre || 'Non commencé'}
-                </Badge>
-              </Group>
-            </Card>
-
+            <Card withBorder radius="md" p="sm" style={{ background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)', color: 'white' }}><Group justify="space-between"><Badge color="blue" size="lg" variant="white">{selectedRecommandation.NumeroRecommandation || `REC-${selectedRecommandation.RecommandationID}`}</Badge><Badge color={getNiveauColor(selectedRecommandation.NiveauMiseEnOeuvre)} variant="filled" size="lg">{selectedRecommandation.NiveauMiseEnOeuvre || 'Non commencé'}</Badge></Group></Card>
             <Divider />
-
             <Grid>
-              <Grid.Col span={12}>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Recommandation</Text>
-                <Text fw={500} size="sm">{selectedRecommandation.TexteRecommandation}</Text>
-              </Grid.Col>
-              <Grid.Col span={12}>
-                <Paper p="sm" bg="blue.0" radius="md">
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Rapport associé</Text>
-                  <Text fw={500} size="sm">{selectedRecommandation.NumeroRapport} - {selectedRecommandation.LibelleRapport}</Text>
-                </Paper>
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Domaine</Text>
-                <Badge color="blue" variant="light">{selectedRecommandation.Domaine || '-'}</Badge>
-              </Grid.Col>
-              <Grid.Col span={6}>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Échéance</Text>
-                <Text fw={500} size="sm">{selectedRecommandation.Echeance || '-'}</Text>
-              </Grid.Col>
-              <Grid.Col span={12}>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Responsable</Text>
-                <Text fw={500} size="sm">{selectedRecommandation.ResponsableMiseEnOeuvre || '-'}</Text>
-              </Grid.Col>
-              {selectedRecommandation.ProblemeFaiblesse && (
-                <Grid.Col span={12}>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Problème identifié</Text>
-                  <Text size="sm">{selectedRecommandation.ProblemeFaiblesse}</Text>
-                </Grid.Col>
-              )}
-              {selectedRecommandation.ActeursImpliques && (
-                <Grid.Col span={12}>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Acteurs impliqués</Text>
-                  <Text size="sm">{selectedRecommandation.ActeursImpliques}</Text>
-                </Grid.Col>
-              )}
+              <Grid.Col span={12}><Text size="xs" c="dimmed" tt="uppercase" fw={600}>Recommandation</Text><Text fw={500} size="sm">{selectedRecommandation.TexteRecommandation}</Text></Grid.Col>
+              <Grid.Col span={12}><Paper p="sm" bg="blue.0" radius="md"><Text size="xs" c="dimmed" tt="uppercase" fw={600}>Rapport associé</Text><Text fw={500} size="sm">{selectedRecommandation.NumeroRapport} - {selectedRecommandation.LibelleRapport}</Text></Paper></Grid.Col>
+              <Grid.Col span={6}><Text size="xs" c="dimmed" tt="uppercase" fw={600}>Domaine</Text><Badge color="blue" variant="light">{selectedRecommandation.Domaine || '-'}</Badge></Grid.Col>
+              <Grid.Col span={6}><Text size="xs" c="dimmed" tt="uppercase" fw={600}>Échéance</Text><Text fw={500} size="sm">{selectedRecommandation.Echeance || '-'}</Text></Grid.Col>
+              <Grid.Col span={12}><Text size="xs" c="dimmed" tt="uppercase" fw={600}>Responsable</Text><Text fw={500} size="sm">{selectedRecommandation.ResponsableMiseEnOeuvre || '-'}</Text></Grid.Col>
+              {selectedRecommandation.ProblemeFaiblesse && (<Grid.Col span={12}><Text size="xs" c="dimmed" tt="uppercase" fw={600}>Problème identifié</Text><Text size="sm">{selectedRecommandation.ProblemeFaiblesse}</Text></Grid.Col>)}
+              {selectedRecommandation.ActeursImpliques && (<Grid.Col span={12}><Text size="xs" c="dimmed" tt="uppercase" fw={600}>Acteurs impliqués</Text><Text size="sm">{selectedRecommandation.ActeursImpliques}</Text></Grid.Col>)}
             </Grid>
-
             <Divider />
-            <Group justify="flex-end">
-              <Button variant="subtle" onClick={() => setViewModalOpen(false)}>Fermer</Button>
-              <Button
-                variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}
-                leftSection={<IconEdit size={16} />}
-                onClick={() => {
-                  setViewModalOpen(false);
-                  setEditingId(selectedRecommandation.RecommandationID);
-                  setCurrentDomaineInput(selectedRecommandation.Domaine || '');
-                  form.setValues({
-                    Services: selectedRecommandation.Services || '',
-                    Source: selectedRecommandation.Source || '',
-                    RapportID: selectedRecommandation.RapportID?.toString() || '',
-                    ProblemeFaiblesse: selectedRecommandation.ProblemeFaiblesse || '',
-                    NumeroRecommandation: selectedRecommandation.NumeroRecommandation || '',
-                    TexteRecommandation: selectedRecommandation.TexteRecommandation || '',
-                    ResponsableMiseEnOeuvre: selectedRecommandation.ResponsableMiseEnOeuvre || '',
-                    ActeursImpliques: selectedRecommandation.ActeursImpliques || '',
-                    InstanceValidation: selectedRecommandation.InstanceValidation || '',
-                    Echeance: selectedRecommandation.Echeance || '',
-                    Domaine: selectedRecommandation.Domaine || '',
-                  });
-                  setModalOpen(true);
-                }}
-              >
-                Modifier
-              </Button>
-            </Group>
+            <Group justify="flex-end"><Button variant="subtle" onClick={() => setViewModalOpen(false)}>Fermer</Button><Button variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }} leftSection={<IconEdit size={16} />} onClick={() => { setViewModalOpen(false); setEditingId(selectedRecommandation.RecommandationID); setCurrentDomaineInput(selectedRecommandation.Domaine || ''); form.setValues({ Services: selectedRecommandation.Services || '', Source: selectedRecommandation.Source || '', RapportID: selectedRecommandation.RapportID?.toString() || '', ProblemeFaiblesse: selectedRecommandation.ProblemeFaiblesse || '', NumeroRecommandation: selectedRecommandation.NumeroRecommandation || '', TexteRecommandation: selectedRecommandation.TexteRecommandation || '', ResponsableMiseEnOeuvre: selectedRecommandation.ResponsableMiseEnOeuvre || '', ActeursImpliques: selectedRecommandation.ActeursImpliques || '', InstanceValidation: selectedRecommandation.InstanceValidation || '', Echeance: selectedRecommandation.Echeance || '', Domaine: selectedRecommandation.Domaine || '' }); setModalOpen(true); }}>Modifier</Button></Group>
           </Stack>
         )}
       </Modal>
 
       {/* Modal Confirmation Suppression */}
-      <Modal
-        opened={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setRecommandationToDelete(null); }}
-        title={<Text fw={600} size="md">Confirmation de suppression</Text>}
-        size="sm"
-        centered
-      >
-        <Stack gap="md">
-          <Alert color="red" variant="light" icon={<IconInfoCircle size={16} />}>
-            Êtes-vous sûr de vouloir supprimer cette recommandation ?
-          </Alert>
-          <Text size="sm" c="dimmed" ta="center">Cette action est irréversible.</Text>
-          <Group justify="space-between" mt="md">
-            <Button variant="light" onClick={() => { setDeleteModalOpen(false); setRecommandationToDelete(null); }}>Annuler</Button>
-            <Button color="red" onClick={handleDelete} leftSection={<IconTrash size={16} />}>Supprimer</Button>
-          </Group>
-        </Stack>
+      <Modal opened={deleteModalOpen} onClose={() => { setDeleteModalOpen(false); setRecommandationToDelete(null); }} title={<Text fw={600} size="md">Confirmation de suppression</Text>} size="sm" centered>
+        <Stack gap="md"><Alert color="red" variant="light" icon={<IconInfoCircle size={16} />}>Êtes-vous sûr de vouloir supprimer cette recommandation ?</Alert><Text size="sm" c="dimmed" ta="center">Cette action est irréversible.</Text><Group justify="space-between" mt="md"><Button variant="light" onClick={() => { setDeleteModalOpen(false); setRecommandationToDelete(null); }}>Annuler</Button><Button color="red" onClick={handleDelete} leftSection={<IconTrash size={16} />}>Supprimer</Button></Group></Stack>
       </Modal>
 
       {/* Modal Instructions */}
-      <Modal
-        opened={infoModalOpen}
-        onClose={() => setInfoModalOpen(false)}
-        title={<Text fw={600} size="md">Instructions</Text>}
-        size="md"
-        centered
-      >
-        <Stack gap="md">
-          <Paper p="md" radius="md" withBorder bg="blue.0">
-            <Text fw={600} size="sm" mb="md">📌 Fonctionnalités :</Text>
-            <Stack gap="xs">
-              <Text size="sm">1️⃣ Renseignez le texte et le numéro de la recommandation</Text>
-              <Text size="sm">2️⃣ Liez la recommandation à un rapport d'inspection</Text>
-              <Text size="sm">3️⃣ Définissez un responsable et une date d'échéance</Text>
-              <Text size="sm">4️⃣ Pour ajouter un nouveau domaine, saisissez-le et cliquez sur "Ajouter"</Text>
-              <Text size="sm">5️⃣ Suivez l'avancement via l'onglet Suivi</Text>
-              <Text size="sm">6️⃣ Exportez la liste au format Excel, PDF ou Word</Text>
-            </Stack>
-          </Paper>
-          <Divider />
-          <Text size="xs" c="dimmed" ta="center">Version 2.0.0 - BD-SDI</Text>
-        </Stack>
+      <Modal opened={infoModalOpen} onClose={() => setInfoModalOpen(false)} title={<Text fw={600} size="md">Instructions</Text>} size="md" centered>
+        <Stack gap="md"><Paper p="md" radius="md" withBorder bg="blue.0"><Text fw={600} size="sm" mb="md">📌 Fonctionnalités :</Text><Stack gap="xs"><Text size="sm">1️⃣ Renseignez le texte et le numéro de la recommandation</Text><Text size="sm">2️⃣ Liez la recommandation à un rapport d'inspection</Text><Text size="sm">3️⃣ Définissez un responsable et une date d'échéance</Text><Text size="sm">4️⃣ Pour ajouter un nouveau domaine, saisissez-le et cliquez sur "Ajouter"</Text><Text size="sm">5️⃣ Suivez l'avancement via l'onglet Suivi</Text><Text size="sm">6️⃣ Exportez la liste au format Excel, PDF ou Word</Text></Stack></Paper><Divider /><Text size="xs" c="dimmed" ta="center">Version 2.0.0 - BD-SDI</Text></Stack>
       </Modal>
     </Box>
   );

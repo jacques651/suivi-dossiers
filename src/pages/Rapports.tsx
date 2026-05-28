@@ -30,7 +30,6 @@ import { usePrint } from '../hooks/usePrint';
 import RapportStatsCards from './rapports/RapportStatsCards';
 import PageHeader from '../components/PageHeader';
 
-
 interface Rapport {
   RapportID: number;
   LibelleRapport: string;
@@ -103,12 +102,10 @@ export default function Rapports() {
 
   const [editingRapport, setEditingRapport] = useState<Rapport | null>(null);
 
-
   const handleSubmit = async (values: typeof form.values) => {
     try {
       let fichierPath = null;
 
-      // CAS 1: Nouveau fichier sélectionné
       if (values.Fichier instanceof File) {
         try {
           const appDataDir = await invoke('get_app_data_dir') as string;
@@ -139,14 +136,9 @@ export default function Rapports() {
           });
           return;
         }
-      }
-      // CAS 2: Pas de nouveau fichier mais en mode édition - garder l'ancien
-      else if (editingId && (values.Fichier === null || values.Fichier === '')) {
-        // Récupérer le fichier existant depuis selectedRapport
+      } else if (editingId && (values.Fichier === null || values.Fichier === '')) {
         fichierPath = selectedRapport?.Fichier || null;
-      }
-      // CAS 3: Valeur string (chemin existant)
-      else if (typeof values.Fichier === 'string') {
+      } else if (typeof values.Fichier === 'string') {
         fichierPath = values.Fichier;
       }
 
@@ -192,7 +184,6 @@ export default function Rapports() {
       });
     }
   };
-
 
   const handleDelete = async () => {
     if (!rapportToDelete) return;
@@ -339,7 +330,7 @@ export default function Rapports() {
       if (!filePath) { setExporting(false); return; }
 
       const rows = filteredRapports.map((rapport, idx) => `
-        <tr>
+        <td>
           <td style="border:1px solid #ddd;padding:8px;text-align:center">${idx + 1}</td>
           <td style="border:1px solid #ddd;padding:8px">${rapport.NumeroRapport}</td>
           <td style="border:1px solid #ddd;padding:8px"><strong>${rapport.LibelleRapport}</strong></td>
@@ -365,7 +356,7 @@ export default function Rapports() {
         <h1>📋 LISTE DES RAPPORTS D'INSPECTION</h1>
         <p>Généré le ${dayjs().format('DD/MM/YYYY HH:mm')}</p>
         <p>Total rapports : ${filteredRapports.length}</p>
-        <table><thead><tr><th>N°</th><th>Numéro</th><th>Libellé</th><th>Date</th><th>Type</th><th>Période</th></tr></thead><tbody>${rows}</tbody><table>
+        <table><thead><tr><th>N°</th><th>Numéro</th><th>Libellé</th><th>Date</th><th>Type</th><th>Période</th></tr></thead><tbody>${rows}</tbody></table>
       </body>
       </html>`;
 
@@ -414,7 +405,7 @@ export default function Rapports() {
           </tr>
         </thead>
         <tbody>${rows}</tbody>
-      </table>
+       </table>
     `;
 
     printDocument(content, 'LISTE DES RAPPORTS D\'INSPECTION', orientation);
@@ -431,10 +422,6 @@ export default function Rapports() {
     (activePage - 1) * itemsPerPage,
     activePage * itemsPerPage
   );
-
-  // Statistiques pour les cartes
-  const totalRapports = rapports.length;
-  const typeCount = [...new Set(rapports.map(r => r.TypeInspection).filter(Boolean))].length;
 
   const typeOptions = ['Contrôle/Audit', 'Investigation'];
 
@@ -463,99 +450,9 @@ export default function Rapports() {
       <Container size="full" fluid>
         <Stack gap="xl">
           {/* En-tête avec PageHeader */}
-          <PageHeader
-            title="Gestion des Rapports d'Inspection"
-            subtitle={`${totalRapports} rapports • ${typeCount} types d'inspection`}
-            rightContent={
-              <Group gap="md">
-                <Button
-                  variant="light"
-                  color="white"
-                  leftSection={<IconRefresh size={18} />}
-                  onClick={loadRapports}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    backdropFilter: 'blur(10px)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
-                  }}
-                >
-                  Actualiser
-                </Button>
+          <PageHeader title="Bienvenue dans la page de Gestion des Rapports d'Inspection" />
 
-                <Menu shadow="md" width={200} position="bottom-end">
-                  <Menu.Target>
-                    <Button
-                      variant="light"
-                      color="white"
-                      leftSection={<IconDownload size={18} />}
-                      loading={exporting}
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.2)',
-                        backdropFilter: 'blur(10px)',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      Exporter
-                    </Button>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    <Menu.Label>Format d'export</Menu.Label>
-                    <Menu.Item leftSection={<IconFileExcel size={16} color="#00a84f" />} onClick={exportToExcel}>
-                      Excel (.xlsx)
-                    </Menu.Item>
-                    <Menu.Item leftSection={<IconFile size={16} color="#e74c3c" />} onClick={exportToPDF}>
-                      PDF (.pdf)
-                    </Menu.Item>
-                    <Menu.Item leftSection={<IconFileWord size={16} color="#2980b9" />} onClick={exportToWord}>
-                      Word (.doc)
-                    </Menu.Item>
-                  </Menu.Dropdown>
-                </Menu>
-
-                <Menu shadow="md" width={200} position="bottom-end">
-                  <Menu.Target>
-                    <Button
-                      variant="light"
-                      color="white"
-                      leftSection={<IconPrinter size={18} />}
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.2)',
-                        backdropFilter: 'blur(10px)',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      Imprimer
-                    </Button>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    <Menu.Item onClick={() => handlePrint('portrait')}>Portrait</Menu.Item>
-                    <Menu.Item onClick={() => handlePrint('landscape')}>Paysage</Menu.Item>
-                  </Menu.Dropdown>
-                </Menu>
-
-                <Button
-                  variant="white"
-                  color="dark"
-                  leftSection={<IconPlus size={18} />}
-                  onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }}
-                  style={{
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  Nouveau Rapport
-                </Button>
-              </Group>
-            }
-          />
-
-          {/* Statistiques avec design amélioré - exactement comme AgentStatsCards */}
+          {/* Statistiques */}
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
             {(styles) => (
               <div style={styles}>
@@ -564,36 +461,113 @@ export default function Rapports() {
             )}
           </Transition>
 
-          {/* Filtres - style amélioré */}
+          {/* Filtres et Boutons sur la même ligne */}
           <Transition mounted={true} transition="slide-down" duration={550} timingFunction="ease">
             {(styles) => (
               <Card withBorder radius="lg" shadow="sm" p="md" style={styles}>
-                <Text fw={600} size="lg" mb="md">
-                  Filtres
-                </Text>
+                <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
+                  {/* Filtres à gauche */}
+                  <Group grow style={{ flex: 2 }}>
+                    <TextInput
+                      label="Recherche"
+                      placeholder="Rechercher par numéro ou libellé..."
+                      leftSection={<IconSearch size={16} />}
+                      value={searchTerm}
+                      onChange={(e) => { setSearchTerm(e.currentTarget.value); setActivePage(1); }}
+                      size="md"
+                      radius="md"
+                    />
 
-                <Group grow align="flex-end">
-                  <TextInput
-                    label="Recherche"
-                    placeholder="Rechercher par numéro ou libellé..."
-                    leftSection={<IconSearch size={16} />}
-                    value={searchTerm}
-                    onChange={(e) => { setSearchTerm(e.currentTarget.value); setActivePage(1); }}
-                    size="md"
-                    radius="md"
-                  />
+                    <Select
+                      label="Type d'inspection"
+                      placeholder="Tous les types"
+                      leftSection={<IconCategory size={16} />}
+                      data={typeOptions}
+                      value={null}
+                      onChange={() => { }}
+                      clearable
+                      size="md"
+                      radius="md"
+                    />
+                  </Group>
 
-                  <Select
-                    label="Type d'inspection"
-                    placeholder="Tous les types"
-                    leftSection={<IconCategory size={16} />}
-                    data={typeOptions}
-                    value={null}
-                    onChange={() => { }}
-                    clearable
-                    size="md"
-                    radius="md"
-                  />
+                  {/* Boutons d'action à droite */}
+                  <Group gap="md" align="flex-end">
+                    <Button
+                      variant="light"
+                      color="dark"
+                      leftSection={<IconRefresh size={18} />}
+                      onClick={loadRapports}
+                      style={{
+                        backgroundColor: 'rgba(27, 54, 93, 0.1)',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      Actualiser
+                    </Button>
+
+                    <Menu shadow="md" width={200} position="bottom-end">
+                      <Menu.Target>
+                        <Button
+                          variant="light"
+                          color="dark"
+                          leftSection={<IconDownload size={18} />}
+                          loading={exporting}
+                          style={{
+                            backgroundColor: 'rgba(27, 54, 93, 0.1)',
+                            transition: 'all 0.3s ease'
+                          }}
+                        >
+                          Exporter
+                        </Button>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Label>Format d'export</Menu.Label>
+                        <Menu.Item leftSection={<IconFileExcel size={16} color="#00a84f" />} onClick={exportToExcel}>
+                          Excel (.xlsx)
+                        </Menu.Item>
+                        <Menu.Item leftSection={<IconFile size={16} color="#e74c3c" />} onClick={exportToPDF}>
+                          PDF (.pdf)
+                        </Menu.Item>
+                        <Menu.Item leftSection={<IconFileWord size={16} color="#2980b9" />} onClick={exportToWord}>
+                          Word (.doc)
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+
+                    <Menu shadow="md" width={200} position="bottom-end">
+                      <Menu.Target>
+                        <Button
+                          variant="light"
+                          color="dark"
+                          leftSection={<IconPrinter size={18} />}
+                          style={{
+                            backgroundColor: 'rgba(27, 54, 93, 0.1)',
+                            transition: 'all 0.3s ease'
+                          }}
+                        >
+                          Imprimer
+                        </Button>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Item onClick={() => handlePrint('portrait')}>Portrait</Menu.Item>
+                        <Menu.Item onClick={() => handlePrint('landscape')}>Paysage</Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+
+                    <Button
+                      variant="filled"
+                      color="#1b365d"
+                      leftSection={<IconPlus size={18} />}
+                      onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }}
+                      style={{
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      Nouveau Rapport
+                    </Button>
+                  </Group>
                 </Group>
               </Card>
             )}
@@ -613,11 +587,7 @@ export default function Rapports() {
                         {filteredRapports.length} rapport{filteredRapports.length !== 1 ? 's' : ''} trouvé{filteredRapports.length !== 1 ? 's' : ''}
                       </Text>
                     </Group>
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      onClick={() => setSearchTerm('')}
-                    >
+                    <Button variant="subtle" size="xs" onClick={() => setSearchTerm('')}>
                       Effacer la recherche
                     </Button>
                   </Group>
@@ -626,7 +596,7 @@ export default function Rapports() {
             </Transition>
           )}
 
-          {/* Tableau - exactement comme AgentTable */}
+          {/* Tableau des rapports */}
           <Transition mounted={true} transition="fade" duration={600} timingFunction="ease">
             {(styles) => (
               <Card withBorder radius="lg" shadow="sm" p="0" style={styles}>
@@ -649,11 +619,7 @@ export default function Rapports() {
                               <Stack align="center" gap="xs">
                                 <IconFileText size={48} color="gray" />
                                 <Text c="dimmed" size="lg">Aucun rapport trouvé</Text>
-                                <Button
-                                  variant="light"
-                                  size="sm"
-                                  onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }}
-                                >
+                                <Button variant="light" size="sm" onClick={() => { setEditingId(null); form.reset(); setModalOpen(true); }}>
                                   Créer un rapport
                                 </Button>
                               </Stack>
@@ -684,11 +650,7 @@ export default function Rapports() {
                             </Table.Td>
                             <Table.Td>
                               {rapport.TypeInspection ? (
-                                <Badge
-                                  color={getTypeColor(rapport.TypeInspection)}
-                                  variant="light"
-                                  size="md"
-                                >
+                                <Badge color={getTypeColor(rapport.TypeInspection)} variant="light" size="md">
                                   {rapport.TypeInspection}
                                 </Badge>
                               ) : (
@@ -698,15 +660,7 @@ export default function Rapports() {
                             <Table.Td ta="center">
                               <Group gap="xs" justify="center" wrap="nowrap">
                                 <Tooltip label="Voir détails" withArrow>
-                                  <ActionIcon
-                                    onClick={() => handleView(rapport)}
-                                    color="green"
-                                    variant="light"
-                                    size="md"
-                                    style={{ transition: 'all 0.3s ease' }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                                  >
+                                  <ActionIcon onClick={() => handleView(rapport)} color="green" variant="light" size="md">
                                     <IconFileText size={18} />
                                   </ActionIcon>
                                 </Tooltip>
@@ -714,14 +668,14 @@ export default function Rapports() {
                                   <ActionIcon
                                     onClick={() => {
                                       setEditingId(rapport.RapportID);
-                                      setEditingRapport(rapport); // ← Stocker le rapport complet
+                                      setEditingRapport(rapport);
                                       form.setValues({
                                         LibelleRapport: rapport.LibelleRapport,
                                         NumeroRapport: rapport.NumeroRapport,
                                         DateRapport: new Date(rapport.DateRapport),
                                         TypeInspection: rapport.TypeInspection || '',
                                         PeriodeSousRevue: rapport.PeriodeSousRevue || '',
-                                        Fichier: null, // FileInput ne peut pas être pré-rempli avec un chemin
+                                        Fichier: null,
                                       });
                                       setModalOpen(true);
                                     }}
@@ -732,16 +686,12 @@ export default function Rapports() {
                                     <IconEdit size={18} />
                                   </ActionIcon>
                                 </Tooltip>
-
                                 <Tooltip label="Supprimer" withArrow>
                                   <ActionIcon
                                     onClick={() => { setRapportToDelete(rapport.RapportID); setDeleteModalOpen(true); }}
                                     color="red"
                                     variant="light"
                                     size="md"
-                                    style={{ transition: 'all 0.3s ease' }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
                                   >
                                     <IconTrash size={18} />
                                   </ActionIcon>
@@ -761,14 +711,7 @@ export default function Rapports() {
           {/* Pagination */}
           {totalPages > 1 && (
             <Group justify="center" mt="md">
-              <Pagination
-                total={totalPages}
-                value={activePage}
-                onChange={setActivePage}
-                color="#1b365d"
-                size="md"
-                radius="md"
-              />
+              <Pagination total={totalPages} value={activePage} onChange={setActivePage} color="#1b365d" size="md" radius="md" />
             </Group>
           )}
         </Stack>
@@ -835,8 +778,6 @@ export default function Rapports() {
               size="md"
               radius="md"
             />
-
-            {/* Champ Fichier */}
             <FileInput
               label="Fichier du rapport"
               placeholder="Sélectionner un fichier"
@@ -846,20 +787,12 @@ export default function Rapports() {
               radius="md"
               clearable
             />
-
-            {/* Afficher le fichier existant en mode édition */}
             {editingId && editingRapport?.Fichier && !form.values.Fichier && (
-              <Alert
-                icon={<IconFile size={16} />}
-                color="blue"
-                variant="light"
-                radius="md"
-              >
+              <Alert icon={<IconFile size={16} />} color="blue" variant="light" radius="md">
                 <Group justify="space-between">
                   <div>
                     <Text size="xs" c="dimmed">Fichier actuel :</Text>
                     <Text size="sm" fw={500}>
-                      {/* Vérifier le type avant d'utiliser split */}
                       {typeof editingRapport.Fichier === 'string'
                         ? editingRapport.Fichier.split('/').pop()
                         : editingRapport.Fichier instanceof File
@@ -867,25 +800,12 @@ export default function Rapports() {
                           : 'Fichier attaché'}
                     </Text>
                   </div>
-                  <Button
-                    size="xs"
-                    variant="subtle"
-                    color="red"
-                    onClick={() => {
-                      form.setFieldValue('Fichier', '');
-                      notifications.show({
-                        title: 'Information',
-                        message: 'Le fichier sera remplacé si vous en sélectionnez un nouveau',
-                        color: 'blue',
-                      });
-                    }}
-                  >
+                  <Button size="xs" variant="subtle" color="red" onClick={() => form.setFieldValue('Fichier', '')}>
                     Remplacer
                   </Button>
                 </Group>
               </Alert>
             )}
-
             <Group justify="flex-end" mt="md">
               <Button variant="light" onClick={() => setModalOpen(false)} radius="md">Annuler</Button>
               <Button type="submit" variant="gradient" gradient={{ from: '#1b365d', to: '#295080' }} radius="md">
@@ -929,9 +849,7 @@ export default function Rapports() {
                 )}
               </Group>
             </Card>
-
             <Divider />
-
             <Grid>
               <Grid.Col span={12}>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Libellé</Text>
@@ -952,8 +870,6 @@ export default function Rapports() {
                 <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Période sous revue</Text>
                 <Text fw={500}>{selectedRapport.PeriodeSousRevue || '-'}</Text>
               </Grid.Col>
-
-              {/* Champ Fichier - Version corrigée */}
               <Grid.Col span={12}>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Fichier</Text>
                 {selectedRapport.Fichier ? (
@@ -965,7 +881,6 @@ export default function Rapports() {
                       leftSection={<IconFile size={14} />}
                       onClick={async () => {
                         try {
-                          // Appeler la commande Tauri pour ouvrir le fichier
                           await invoke('open_rapport_file', { filePath: selectedRapport.Fichier });
                         } catch (error) {
                           notifications.show({
@@ -1047,30 +962,12 @@ export default function Rapports() {
               📋 Fonctionnalités principales :
             </Text>
             <Stack gap="sm">
-              <Group gap="sm">
-                <ThemeIcon size="xs" radius="xl" color="blue" variant="light">1</ThemeIcon>
-                <Text size="sm">Créez un nouveau rapport avec le bouton <strong>"Nouveau Rapport"</strong></Text>
-              </Group>
-              <Group gap="sm">
-                <ThemeIcon size="xs" radius="xl" color="blue" variant="light">2</ThemeIcon>
-                <Text size="sm">Renseignez le libellé, le numéro, la date et le type d'inspection</Text>
-              </Group>
-              <Group gap="sm">
-                <ThemeIcon size="xs" radius="xl" color="blue" variant="light">3</ThemeIcon>
-                <Text size="sm">Décrivez la période sous revue pour plus de précision</Text>
-              </Group>
-              <Group gap="sm">
-                <ThemeIcon size="xs" radius="xl" color="blue" variant="light">4</ThemeIcon>
-                <Text size="sm">Exportez la liste au format Excel, PDF ou Word</Text>
-              </Group>
-              <Group gap="sm">
-                <ThemeIcon size="xs" radius="xl" color="blue" variant="light">5</ThemeIcon>
-                <Text size="sm">Utilisez la recherche pour filtrer rapidement les rapports</Text>
-              </Group>
-              <Group gap="sm">
-                <ThemeIcon size="xs" radius="xl" color="blue" variant="light">6</ThemeIcon>
-                <Text size="sm">Imprimez la liste en format portrait ou paysage</Text>
-              </Group>
+              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">1</ThemeIcon><Text size="sm">Créez un nouveau rapport avec le bouton <strong>"Nouveau Rapport"</strong></Text></Group>
+              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">2</ThemeIcon><Text size="sm">Renseignez le libellé, le numéro, la date et le type d'inspection</Text></Group>
+              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">3</ThemeIcon><Text size="sm">Décrivez la période sous revue pour plus de précision</Text></Group>
+              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">4</ThemeIcon><Text size="sm">Exportez la liste au format Excel, PDF ou Word</Text></Group>
+              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">5</ThemeIcon><Text size="sm">Utilisez la recherche pour filtrer rapidement les rapports</Text></Group>
+              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">6</ThemeIcon><Text size="sm">Imprimez la liste en format portrait ou paysage</Text></Group>
             </Stack>
           </Paper>
           <Divider />

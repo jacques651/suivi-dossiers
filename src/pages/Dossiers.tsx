@@ -13,7 +13,8 @@ import {
   IconGavel,
   IconRefresh, IconDownload, IconPrinter,
   IconFileExcel, IconFile, IconFileWord, IconInfoCircle,
-  IconCheck, IconX} from '@tabler/icons-react';
+  IconCheck, IconX
+} from '@tabler/icons-react';
 import { invoke } from '@tauri-apps/api/core';
 import { notifications } from '@mantine/notifications';
 import { usePrint } from '../hooks/usePrint';
@@ -78,7 +79,6 @@ export default function Dossiers() {
   const [currentEtat, setCurrentEtat] = useState('En cours');
   const isEtatEnCours = currentEtat === 'En cours';
 
-  // Options dynamiques
   const [typeInconduiteOptions, setTypeInconduiteOptions] = useState<string[]>([
     'Faute professionnelle',
     'Abus de pouvoir',
@@ -153,7 +153,6 @@ export default function Dossiers() {
     setCurrentEtat(form.values.Etat || 'En cours');
   }, [form.values.Etat]);
 
-  // Fonctions de chargement
   const loadDossiers = async () => {
     setLoading(true);
     try {
@@ -207,7 +206,6 @@ export default function Dossiers() {
     }
   };
 
-  // Fonction pour ajouter un nouveau type d'inconduite
   const addNewTypeInconduite = (newType: string) => {
     if (newType && newType.trim() !== '') {
       const typeExists = typeInconduiteOptions.some(
@@ -227,14 +225,12 @@ export default function Dossiers() {
     }
   };
 
-  // CRUD Operations
   const handleSubmit = async (values: typeof form.values) => {
     try {
       if (!values.PersonnelID) {
         throw new Error("Veuillez sélectionner un agent");
       }
 
-      // 🔥 Ajouter le nouveau type d'inconduite s'il n'existe pas
       if (values.TypeInconduite && values.TypeInconduite.trim() !== '') {
         const typeExists = typeInconduiteOptions.some(
           option => option.toLowerCase() === values.TypeInconduite.toLowerCase()
@@ -300,7 +296,6 @@ export default function Dossiers() {
     }
   };
 
-  // Utilitaires
   const getEtatColor = (etat?: string) => {
     switch (etat) {
       case 'Clôturé': return 'green';
@@ -322,7 +317,6 @@ export default function Dossiers() {
     return colors[type || ''] || 'blue';
   };
 
-  // Exports
   const exportToExcel = async () => {
     setExporting(true);
     await new Promise(r => setTimeout(r, 500));
@@ -379,7 +373,6 @@ export default function Dossiers() {
     printDocument(content, 'LISTE DES DOSSIERS', orientation);
   };
   
-  // Filtrage et pagination
   const filteredDossiers = dossiers.filter(dossier => {
     const matchesSearch = `${dossier.AgentNom} ${dossier.AgentPrenom} ${dossier.AgentMatricule}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (dossier.TypeInconduite && dossier.TypeInconduite.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -446,35 +439,13 @@ export default function Dossiers() {
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-         <PageHeader 
-  title="Dossiers Disciplinaires"
-  subtitle="Gérez les dossiers disciplinaires des agents"
-  rightContent={
-    <Button 
-      variant="light" 
-      color="white" 
-      leftSection={<IconInfoCircle size={18} />} 
-      onClick={() => setInfoModalOpen(true)}
-      style={{
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.2)',
-        transition: 'all 0.3s ease'
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
-        e.currentTarget.style.transform = 'translateY(-2px)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
-        e.currentTarget.style.transform = 'translateY(0)';
-      }}
-    >
-      Instructions
-    </Button>
-  }
-/>
+          {/* PageHeader sans rightContent */}
+          <PageHeader 
+            title="Bienvenue dans la page de Gestion des Dossiers d'Inconduite"
+            
+          />
 
+          {/* Cartes statistiques */}
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
             {(styles) => (
               <div style={styles}>
@@ -483,30 +454,56 @@ export default function Dossiers() {
             )}
           </Transition>
 
-          {/* Barre d'actions */}
+          {/* Filtres et Boutons sur la même ligne */}
           <Card withBorder radius="lg" shadow="sm" p="md">
-            <Group justify="space-between" align="flex-end" mb="md">
-              <Box>
-                <Text fw={600} size="lg">Liste des dossiers</Text>
-                <Text size="xs" c="dimmed">{filteredDossiers.length} dossier(s) trouvé(s)</Text>
-              </Box>
-              <Group>
+            <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
+              {/* Filtres à gauche */}
+              <Group grow style={{ flex: 2 }}>
+                <TextInput
+                  placeholder="Rechercher par agent, matricule ou type d'inconduite..."
+                  leftSection={<IconSearch size={16} />}
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.currentTarget.value); setActivePage(1); }}
+                  size="sm"
+                />
+                <Select
+                  placeholder="Filtrer par état"
+                  value={filterEtat}
+                  onChange={(val) => { setFilterEtat(val); setActivePage(1); }}
+                  clearable
+                  data={etatOptions}
+                  size="sm"
+                />
+              </Group>
+
+              {/* Boutons d'action à droite */}
+              <Group gap="sm" align="flex-end">
                 <Tooltip label="Actualiser">
                   <ActionIcon onClick={loadDossiers} size="lg" variant="light" color="blue">
                     <IconRefresh size={18} />
                   </ActionIcon>
                 </Tooltip>
+                
                 <Menu shadow="md" width={200} position="bottom-end">
                   <Menu.Target>
-                    <Button leftSection={<IconDownload size={16} />} variant="outline" loading={exporting}>Exporter</Button>
+                    <Button leftSection={<IconDownload size={16} />} variant="outline" loading={exporting}>
+                      Exporter
+                    </Button>
                   </Menu.Target>
                   <Menu.Dropdown>
                     <Menu.Label>Format d'export</Menu.Label>
-                    <Menu.Item leftSection={<IconFileExcel size={16} color="#00a84f" />} onClick={exportToExcel}>Excel (.xlsx)</Menu.Item>
-                    <Menu.Item leftSection={<IconFile size={16} color="#e74c3c" />} onClick={exportToPDF}>PDF (.pdf)</Menu.Item>
-                    <Menu.Item leftSection={<IconFileWord size={16} color="#2980b9" />} onClick={exportToWord}>Word (.doc)</Menu.Item>
+                    <Menu.Item leftSection={<IconFileExcel size={16} color="#00a84f" />} onClick={exportToExcel}>
+                      Excel (.xlsx)
+                    </Menu.Item>
+                    <Menu.Item leftSection={<IconFile size={16} color="#e74c3c" />} onClick={exportToPDF}>
+                      PDF (.pdf)
+                    </Menu.Item>
+                    <Menu.Item leftSection={<IconFileWord size={16} color="#2980b9" />} onClick={exportToWord}>
+                      Word (.doc)
+                    </Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
+
                 <Menu shadow="md" width={150}>
                   <Menu.Target>
                     <Tooltip label="Imprimer">
@@ -516,44 +513,46 @@ export default function Dossiers() {
                     </Tooltip>
                   </Menu.Target>
                   <Menu.Dropdown>
-                    <Menu.Item onClick={() => handlePrint('portrait')}>
-                      🧾 Portrait
-                    </Menu.Item>
-                    <Menu.Item onClick={() => handlePrint('landscape')}>
-                      📄 Paysage
-                    </Menu.Item>
+                    <Menu.Item onClick={() => handlePrint('portrait')}>🧾 Portrait</Menu.Item>
+                    <Menu.Item onClick={() => handlePrint('landscape')}>📄 Paysage</Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
-                <Button leftSection={<IconPlus size={16} />} onClick={() => { setEditingId(null); form.reset(); setCurrentEtat('En cours'); setModalOpen(true); loadTypeInconduiteOptions(); }} variant="gradient" gradient={{ from: '#1b365d', to: '#2a4a7a' }}>
+
+                <Button 
+                  leftSection={<IconPlus size={16} />} 
+                  onClick={() => { setEditingId(null); form.reset(); setCurrentEtat('En cours'); setModalOpen(true); loadTypeInconduiteOptions(); }} 
+                  variant="gradient" 
+                  gradient={{ from: '#1b365d', to: '#2a4a7a' }}
+                >
                   Nouveau Dossier
                 </Button>
+
+                <Tooltip label="Instructions">
+                  <ActionIcon 
+                    onClick={() => setInfoModalOpen(true)} 
+                    size="lg" 
+                    variant="light" 
+                    color="gray"
+                  >
+                    <IconInfoCircle size={18} />
+                  </ActionIcon>
+                </Tooltip>
               </Group>
             </Group>
 
             <Divider my="md" />
 
-            {/* Filtres */}
-            <Grid>
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  placeholder="Rechercher par agent, matricule ou type d'inconduite..."
-                  leftSection={<IconSearch size={16} />}
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.currentTarget.value); setActivePage(1); }}
-                  size="sm"
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 3 }}>
-                <Select
-                  placeholder="Filtrer par état"
-                  value={filterEtat}
-                  onChange={(val) => { setFilterEtat(val); setActivePage(1); }}
-                  clearable
-                  data={etatOptions}
-                  size="sm"
-                />
-              </Grid.Col>
-            </Grid>
+            {/* Résumé des filtres */}
+            <Group justify="space-between">
+              <Box>
+                <Text size="xs" c="dimmed">{filteredDossiers.length} dossier(s) trouvé(s)</Text>
+              </Box>
+              {searchTerm && (
+                <Button variant="subtle" size="xs" onClick={() => setSearchTerm('')}>
+                  Effacer la recherche
+                </Button>
+              )}
+            </Group>
           </Card>
 
           {/* Tableau */}
@@ -642,7 +641,6 @@ export default function Dossiers() {
                             <Tooltip label="Voir détails" withArrow>
                               <ActionIcon
                                 onClick={() => {
-                                  console.log("Ouverture modal détails", dossier);
                                   setSelectedDossier(dossier);
                                   setViewModalOpen(true);
                                 }}
@@ -715,7 +713,7 @@ export default function Dossiers() {
         </Stack>
       </Container>
 
-      {/* Modal Formulaire - Version avec ajout de type d'inconduite par bouton */}
+      {/* Modal Formulaire - le reste reste identique */}
       <Modal
         opened={modalOpen}
         onClose={() => {
@@ -737,7 +735,6 @@ export default function Dossiers() {
       >
         <form onSubmit={form.onSubmit(handleSubmit)}>
           <Stack gap="md">
-            {/* ================= AGENT ================= */}
             <Card withBorder radius="md" p="sm">
               <Select
                 label="Agent concerné"
@@ -753,10 +750,8 @@ export default function Dossiers() {
               />
             </Card>
 
-            {/* ================= INCONDUITE ================= */}
             <Card withBorder radius="md" p="sm">
               <Stack gap="xs">
-                {/* Type d'inconduite avec bouton d'ajout */}
                 <Group align="flex-end" gap="xs">
                   <div style={{ flex: 1 }}>
                     <Select
@@ -785,7 +780,6 @@ export default function Dossiers() {
                   </Button>
                 </Group>
 
-                {/* ANNÉE + MOIS */}
                 <Grid>
                   <Grid.Col span={4}>
                     <TextInput
@@ -814,7 +808,6 @@ export default function Dossiers() {
               </Stack>
             </Card>
 
-            {/* ================= SUIVI ================= */}
             <Card withBorder radius="md" p="sm">
               <Select
                 label="Service d'investigation"
@@ -840,7 +833,6 @@ export default function Dossiers() {
                 size="sm"
               />
 
-              {/* ETAT + SUITE */}
               <Grid mt="xs">
                 <Grid.Col span={4}>
                   <Select
@@ -870,7 +862,6 @@ export default function Dossiers() {
               </Grid>
             </Card>
 
-            {/* ================= SANCTION ================= */}
             {!isEtatEnCours && (
               <Card withBorder radius="md" p="sm">
                 <Grid>
@@ -921,7 +912,6 @@ export default function Dossiers() {
               </Card>
             )}
 
-            {/* ================= OBSERVATIONS ================= */}
             <Textarea
               label="Observations"
               rows={2}
@@ -929,7 +919,6 @@ export default function Dossiers() {
               size="sm"
             />
 
-            {/* ================= ACTIONS ================= */}
             <Group justify="flex-end">
               <Button
                 variant="subtle"
@@ -941,7 +930,6 @@ export default function Dossiers() {
               >
                 Annuler
               </Button>
-
               <Button type="submit">
                 {editingId ? 'Modifier' : 'Créer'}
               </Button>
@@ -950,7 +938,7 @@ export default function Dossiers() {
         </form>
       </Modal>
 
-      {/* Modal Confirmation Suppression */}
+      {/* Modal Confirmation Suppression - identique */}
       <Modal
         opened={deleteModalOpen}
         onClose={() => { setDeleteModalOpen(false); setDossierToDelete(null); }}
@@ -977,7 +965,7 @@ export default function Dossiers() {
         </Stack>
       </Modal>
 
-      {/* Modal Instructions */}
+      {/* Modal Instructions - identique */}
       <Modal
         opened={infoModalOpen}
         onClose={() => setInfoModalOpen(false)}
@@ -1009,7 +997,7 @@ export default function Dossiers() {
         </Stack>
       </Modal>
 
-      {/* Modal Voir Détails */}
+      {/* Modal Voir Détails - identique */}
       <Modal
         opened={viewModalOpen}
         onClose={() => { setViewModalOpen(false); setSelectedDossier(null); }}
@@ -1034,7 +1022,6 @@ export default function Dossiers() {
       >
         {selectedDossier && (
           <Stack gap="md">
-            {/* Carte Agent + Inconduite */}
             <Paper p="md" radius="md" withBorder>
               <Grid>
                 <Grid.Col span={6}>
@@ -1065,7 +1052,6 @@ export default function Dossiers() {
               </Grid>
             </Paper>
 
-            {/* Carte Suivi */}
             <Paper p="md" radius="md" withBorder>
               <Grid>
                 <Grid.Col span={4}>
@@ -1085,7 +1071,6 @@ export default function Dossiers() {
               </Grid>
             </Paper>
 
-            {/* Carte Sanction (si présente) */}
             {selectedDossier.Sanction && (
               <Paper p="md" radius="md" withBorder bg="red.0" style={{ borderLeft: '4px solid #e03131' }}>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">⚖️ Sanction appliquée</Text>
@@ -1114,7 +1099,6 @@ export default function Dossiers() {
               </Paper>
             )}
 
-            {/* Carte Observations (si présentes) */}
             {selectedDossier.Observations && (
               <Paper p="md" radius="md" withBorder bg="gray.0">
                 <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>📝 Observations</Text>

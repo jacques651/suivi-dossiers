@@ -153,61 +153,65 @@ export default function Referentiels() {
     );
   }
 
-  // Calcul des statistiques pour le sous-titre
-  const totalItems = grades.length + sanctions.length + signataires.length + services.length;
-  const activeTabsCount = 7; // Nombre d'onglets
+
 
   return (
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header avec PageHeader */}
+          {/* Header avec PageHeader - sans rightContent */}
           <PageHeader 
-            title="Configuration des Référentiels"
-            subtitle={`${totalItems} éléments configurés • ${activeTabsCount} catégories`}
-            rightContent={
-              <Group gap="xs">
-                <Badge size="md" variant="light" color="white" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                  v2.0
-                </Badge>
-                <Button 
-                  size="sm" 
-                  variant="light" 
-                  color="white" 
-                  leftSection={<IconRefresh size={14} />} 
-                  onClick={loadAllData} 
-                  radius="md"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.15)',
-                    backdropFilter: 'blur(10px)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
-                  }}
-                >
-                  Actualiser
-                </Button>
-              </Group>
-            }
+            title="Bienvenue dans la page de Configuration des Référentiels"
+          
           />
 
-          {/* Tabs avec composants modulaires */}
+          {/* Carte avec onglets - Version sans barre d'actions séparée */}
           <Card withBorder radius="md" shadow="none" p={0}>
             <Tabs value={activeTab} onChange={setActiveTab} variant="pills" radius="md">
-              <Tabs.List grow p="xs" style={{ backgroundColor: '#f8f9fa', borderBottom: '1px solid #e9ecef' }}>
-                <Tabs.Tab value="grades" leftSection={<IconUserStar size={16} />}>Grades</Tabs.Tab>
-                <Tabs.Tab value="sanctions" leftSection={<IconGavel size={16} />}>Sanctions</Tabs.Tab>
-                <Tabs.Tab value="signataires" leftSection={<IconSignature size={16} />}>Signataires</Tabs.Tab>
-                <Tabs.Tab value="services" leftSection={<IconBuildingCommunity size={16} />}>Services</Tabs.Tab>
-                <Tabs.Tab value="parametres" leftSection={<IconSettings size={16} />}>Paramètres</Tabs.Tab>
-                <Tabs.Tab value="entete" leftSection={<IconHdr size={16} />}>En-têtes</Tabs.Tab>
-                <Tabs.Tab value="logs" leftSection={<IconHistory size={16} />}>Historique</Tabs.Tab>
-              </Tabs.List>
+              {/* En-tête des onglets avec version et bouton actualiser */}
+              <div style={{ borderBottom: '1px solid #e9ecef', backgroundColor: '#f8f9fa' }}>
+                <Group justify="space-between" align="center" wrap="wrap" p="xs">
+                  {/* Onglets */}
+                  <Tabs.List grow style={{ flex: 1 }}>
+                    <Tabs.Tab value="grades" leftSection={<IconUserStar size={16} />}>Grades</Tabs.Tab>
+                    <Tabs.Tab value="sanctions" leftSection={<IconGavel size={16} />}>Sanctions</Tabs.Tab>
+                    <Tabs.Tab value="signataires" leftSection={<IconSignature size={16} />}>Signataires</Tabs.Tab>
+                    <Tabs.Tab value="services" leftSection={<IconBuildingCommunity size={16} />}>Services</Tabs.Tab>
+                    <Tabs.Tab value="parametres" leftSection={<IconSettings size={16} />}>Paramètres</Tabs.Tab>
+                    <Tabs.Tab value="entete" leftSection={<IconHdr size={16} />}>En-têtes</Tabs.Tab>
+                    <Tabs.Tab value="logs" leftSection={<IconHistory size={16} />}>Historique</Tabs.Tab>
+                  </Tabs.List>
 
+                  {/* Version et Bouton Actualiser à droite */}
+                  <Group gap="xs" ml="auto">
+                    <Badge size="md" variant="light" color="dark" style={{ backgroundColor: '#e9ecef' }}>
+                      v2.0
+                    </Badge>
+                    <Button 
+                      size="sm" 
+                      variant="light" 
+                      color="dark" 
+                      leftSection={<IconRefresh size={14} />} 
+                      onClick={loadAllData} 
+                      radius="md"
+                      style={{
+                        backgroundColor: 'rgba(27, 54, 93, 0.1)',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(27, 54, 93, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(27, 54, 93, 0.1)';
+                      }}
+                    >
+                      Actualiser
+                    </Button>
+                  </Group>
+                </Group>
+              </div>
+
+              {/* Contenu des onglets */}
               <Tabs.Panel value="grades" p="xs">
                 <GradesTab grades={grades} onRefresh={loadEssentialData} />
               </Tabs.Panel>

@@ -199,48 +199,26 @@ const SuiviRecommandationsManager: React.FC = () => {
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header avec PageHeader */}
+          {/* Header avec PageHeader - sans rightContent */}
           <PageHeader 
-            title="Suivi des Recommandations"
-            subtitle={`${suivis.length} recommandations suivies • ${suivis.filter(s => s.NiveauMiseEnOeuvre === 'Réalisée').length} réalisées`}
-            rightContent={
-              <Button 
-                variant="light" 
-                color="white" 
-                leftSection={<IconInfoCircle size={18} />} 
-                onClick={() => setInfoModalOpen(true)}
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.15)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                Instructions
-              </Button>
-            }
+            title="Bienvenue dans la page de Suivi des Recommandations"
+            
           />
 
           {/* Cartes Statistiques */}
           <SuiviRecommandationStatCards suivis={suivis} />
 
-          {/* Barre d'actions */}
+          {/* Filtres et Boutons sur la même ligne */}
           <Card withBorder radius="lg" shadow="sm" p="md">
-            <Group justify="space-between">
-              <Group>
+            <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
+              {/* Filtres à gauche */}
+              <Group grow style={{ flex: 2 }}>
                 <TextInput 
-                  placeholder="Rechercher..." 
+                  placeholder="Rechercher par texte ou service..." 
                   leftSection={<IconSearch size={16} />} 
                   value={searchTerm} 
                   onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
+                  size="sm"
                 />
                 <Select 
                   placeholder="Filtrer par niveau" 
@@ -248,14 +226,18 @@ const SuiviRecommandationsManager: React.FC = () => {
                   value={filterNiveau} 
                   onChange={setFilterNiveau} 
                   clearable 
+                  size="sm"
                 />
               </Group>
-              <Group>
+
+              {/* Boutons d'action à droite */}
+              <Group gap="sm" align="flex-end">
                 <Tooltip label="Actualiser">
-                  <ActionIcon variant="light" onClick={loadSuivis}>
+                  <ActionIcon variant="light" onClick={loadSuivis} size="lg" color="blue">
                     <IconRefresh size={18} />
                   </ActionIcon>
                 </Tooltip>
+
                 <Menu shadow="md" width={200} position="bottom-end">
                   <Menu.Target>
                     <Button leftSection={<IconDownload size={16} />} variant="outline" loading={exporting}>
@@ -269,10 +251,11 @@ const SuiviRecommandationsManager: React.FC = () => {
                     </Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
+
                 <Menu shadow="md" width={160}>
                   <Menu.Target>
                     <Tooltip label="Imprimer">
-                      <ActionIcon variant="light" color="teal">
+                      <ActionIcon variant="light" color="teal" size="lg">
                         <IconPrinter size={18} />
                       </ActionIcon>
                     </Tooltip>
@@ -282,8 +265,31 @@ const SuiviRecommandationsManager: React.FC = () => {
                     <Menu.Item onClick={() => handlePrint('landscape')}>📄 Paysage</Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
+
+                <Tooltip label="Instructions">
+                  <ActionIcon 
+                    variant="light" 
+                    color="gray" 
+                    size="lg"
+                    onClick={() => setInfoModalOpen(true)}
+                  >
+                    <IconInfoCircle size={18} />
+                  </ActionIcon>
+                </Tooltip>
               </Group>
             </Group>
+
+            <Divider my="md" />
+
+            {/* Résumé des filtres */}
+            {(searchTerm || filterNiveau) && (
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">{filtered.length} suivi(s) trouvé(s)</Text>
+                <Button variant="subtle" size="xs" onClick={() => { setSearchTerm(''); setFilterNiveau(null); }}>
+                  Effacer les filtres
+                </Button>
+              </Group>
+            )}
           </Card>
 
           {/* Tableau */}

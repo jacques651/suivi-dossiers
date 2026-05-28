@@ -164,52 +164,9 @@ export default function AgentManager() {
     <Box style={{ background: '#f8f9fa', minHeight: '100vh' }} p="md">
       <Container size="full" fluid>
         <Stack gap="xl">
-          {/* En-tête avec PageHeader */}
+          {/* En-tête avec PageHeader - sans rightContent */}
           <PageHeader 
-            title="Gestion des Agents"
-            subtitle={`${agents.length} agents • ${serviceOptions.length} services`}
-            rightContent={
-              <Group gap="md">
-                <Button
-                  variant="light"
-                  color="white"
-                  leftSection={<IconRefresh size={18} />}
-                  onClick={loadAgents}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    backdropFilter: 'blur(10px)',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
-                  }}
-                >
-                  Actualiser
-                </Button>
-
-                <AgentExportMenu
-                  agents={filteredAgents}
-                  grades={grades}
-                  onImport={() => setImportModalOpen(true)}
-                />
-
-                <Button
-                  variant="white"
-                  color="dark"
-                  leftSection={<IconPlus size={18} />}
-                  onClick={handleAdd}
-                  style={{
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                  }}
-                >
-                  Nouvel Agent
-                </Button>
-              </Group>
-            }
+            title="Bienvenue dans la page de Gestion des Agents"
           />
 
           {/* Statistiques */}
@@ -221,22 +178,68 @@ export default function AgentManager() {
             )}
           </Transition>
 
-          {/* Filtres */}
+          {/* Filtres et Boutons sur la même ligne */}
           <Transition mounted={true} transition="slide-down" duration={550} timingFunction="ease">
             {(styles) => (
-              <div style={styles}>
-                <AgentFilters
-                  searchTerm={searchTerm}
-                  onSearchChange={setSearchTerm}
-                  selectedSexe={selectedSexe}
-                  onSexeChange={setSelectedSexe}
-                  selectedService={selectedService}
-                  onServiceChange={setSelectedService}
-                  selectedEntite={selectedEntite}
-                  onEntiteChange={setSelectedEntite}
-                  serviceOptions={serviceOptions}
-                />
-              </div>
+              <Card withBorder radius="lg" shadow="sm" p="md" style={styles}>
+                <Group justify="space-between" align="flex-end" wrap="wrap" gap="md">
+                  {/* Filtres à gauche */}
+                  <div style={{ flex: 2 }}>
+                    <AgentFilters
+                      searchTerm={searchTerm}
+                      onSearchChange={setSearchTerm}
+                      selectedSexe={selectedSexe}
+                      onSexeChange={setSelectedSexe}
+                      selectedService={selectedService}
+                      onServiceChange={setSelectedService}
+                      selectedEntite={selectedEntite}
+                      onEntiteChange={setSelectedEntite}
+                      serviceOptions={serviceOptions}
+                    />
+                  </div>
+
+                  {/* Boutons d'action à droite */}
+                  <Group gap="md" align="flex-end">
+                    <Button
+                      variant="light"
+                      color="dark"
+                      leftSection={<IconRefresh size={18} />}
+                      onClick={loadAgents}
+                      style={{
+                        backgroundColor: 'rgba(27, 54, 93, 0.1)',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(27, 54, 93, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(27, 54, 93, 0.1)';
+                      }}
+                    >
+                      Actualiser
+                    </Button>
+
+                    <AgentExportMenu
+                      agents={filteredAgents}
+                      grades={grades}
+                      onImport={() => setImportModalOpen(true)}
+                    />
+
+                    <Button
+                      variant="filled"
+                      color="#1b365d"
+                      leftSection={<IconPlus size={18} />}
+                      onClick={handleAdd}
+                      style={{
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      Nouvel Agent
+                    </Button>
+                  </Group>
+                </Group>
+              </Card>
             )}
           </Transition>
 

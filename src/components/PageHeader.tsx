@@ -1,5 +1,5 @@
 // src/components/PageHeader.tsx
-import { Card, Group, Title, Text, Box, Image, Button } from '@mantine/core';
+import { Card, Title, Text, Box, Image, Stack, Button } from '@mantine/core';
 import { IconCategory } from '@tabler/icons-react';
 
 interface PageHeaderProps {
@@ -20,22 +20,22 @@ export default function PageHeader({
   return (
     <Card
       withBorder
-      radius="lg"
-      p="xl"
+      radius="md"
+      p="md"
       style={{
         background: 'linear-gradient(135deg, #1b365d 0%, #2a4a7a 100%)',
         position: 'relative',
         overflow: 'hidden'
       }}
     >
-      {/* Décoration de fond */}
+      {/* Décoration de fond plus petites */}
       <Box
         style={{
           position: 'absolute',
-          top: -50,
-          right: -50,
-          width: 200,
-          height: 200,
+          top: -30,
+          right: -30,
+          width: 120,
+          height: 120,
           borderRadius: '50%',
           background: 'rgba(255,255,255,0.05)',
           pointerEvents: 'none'
@@ -44,89 +44,132 @@ export default function PageHeader({
       <Box
         style={{
           position: 'absolute',
-          bottom: -30,
-          left: -30,
-          width: 150,
-          height: 150,
+          bottom: -20,
+          left: -20,
+          width: 100,
+          height: 100,
           borderRadius: '50%',
           background: 'rgba(255,255,255,0.03)',
           pointerEvents: 'none'
         }}
       />
 
-      <Group justify="space-between" align="center" wrap="wrap" gap="lg">
-        <Group gap="xl" align="center">
-          {/* Logo avec fond blanc */}
-          <Box
+      {/* Contenu centré - plus compact */}
+      <Stack gap="sm" align="center" justify="center" style={{ position: 'relative', zIndex: 1 }}>
+        {/* Logo avec fond blanc - plus petit */}
+        <Box
+          style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 8,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+          }}
+        >
+          <Image
+            src="/armoirie.jpeg"
+            alt="Armoiries du Burkina Faso"
+            w={50}
+            h={50}
+            fit="contain"
+          />
+        </Box>
+
+        {/* Ministère et Service centrés - texte plus petit */}
+        <Stack gap={0} align="center">
+          <Text
+            c="gray.1"
+            size="lg"
+            fw={600}
             style={{
-              backgroundColor: 'white',
-              borderRadius: 16,
-              padding: 12,
-              boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              textAlign: 'center'
             }}
           >
-            <Image
-              src="/armoirie.jpeg"
-              alt="Armoiries du Burkina Faso"
-              w={70}
-              h={70}
-              fit="contain"
-            />
-          </Box>
+            MINISTÈRE DE LA SÉCURITÉ
+          </Text>
+          <Text
+            c="gray.3"
+            size="xs"
+            fw={500}
+            style={{
+              fontStyle: 'italic',
+              textAlign: 'center'
+            }}
+          >
+            INSPECTION TECHNIQUE DES SERVICES
+          </Text>
+        </Stack>
 
-          {/* Titre et sous-titre */}
-          <Box>
-            <Title
-              order={1}
-              c="white"
-              style={{
-                fontSize: '2rem',
-                fontWeight: 800,
-                letterSpacing: '-0.02em',
-                textShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        {/* Titre principal centré - plus compact */}
+        <Box>
+          <Title
+            order={2}
+            c="white"
+            style={{
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+              margin: 0,
+              textAlign: 'center'
+            }}
+          >
+            {title}
+          </Title>
+          {subtitle && (
+            <Text
+              c="gray.3"
+              size="sm"
+              mt={2}
+              style={{ 
+                fontWeight: 500,
+                textAlign: 'center'
               }}
             >
-              {title}
-            </Title>
-            {subtitle && (
-              <Text
-                c="gray.2"
-                size="md"
-                mt={4}
-                style={{ fontWeight: 400 }}
-              >
-                {subtitle}
-              </Text>
-            )}
-          </Box>
-        </Group>
+              {subtitle}
+            </Text>
+          )}
+        </Box>
+      </Stack>
 
-        {/* Contenu à droite */}
-        {rightContent ? rightContent : (showConfigButton && (
-          <Button
-            variant="light"
-            color="white"
-            leftSection={<IconCategory size={18} />}
-            onClick={onConfigClick}
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              transition: 'all 0.3s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            Configuration
-          </Button>
-        ))}
-      </Group>
+      {/* Bouton de configuration si nécessaire (en absolu) */}
+      {(showConfigButton || rightContent) && (
+        <Box
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            zIndex: 2
+          }}
+        >
+          {rightContent ? rightContent : (
+            <Button
+              variant="light"
+              color="white"
+              size="xs"
+              leftSection={<IconCategory size={14} />}
+              onClick={onConfigClick}
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              Configuration
+            </Button>
+          )}
+        </Box>
+      )}
     </Card>
   );
 }

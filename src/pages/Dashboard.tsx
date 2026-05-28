@@ -86,35 +86,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <Stack gap="lg">
           <PageHeader
             title="Tableau de bord de suivi de dossiers d'inconduite"
-            subtitle={`${stats.totalAgents} agents • ${stats.totalDossiers} dossiers • ${stats.totalRecommandations} recommandations • ${new Date().toLocaleDateString('fr-FR')}`}
-            rightContent={
-              <Group gap="sm">
-                <Badge
-                  size="lg"
-                  variant="light"
-                  color={tauxRealisation >= 75 ? "green" : tauxRealisation >= 50 ? "orange" : "red"}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    color: 'white',
-                    padding: '8px 16px'
-                  }}
-                >
-                  {tauxRealisation.toFixed(1)}% de recommandations réalisées
-                </Badge>
-                <Button
-                  variant="light"
-                  color="white"
-                  size="sm"
-                  onClick={() => window.location.reload()}
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.15)',
-                    backdropFilter: 'blur(10px)'
-                  }}
-                >
-                  Actualiser
-                </Button>
-              </Group>
-            }
+            
           />
           {/* Cartes Statistiques */}
           <DashboardStatCards stats={stats} onNavigate={onNavigate} />
