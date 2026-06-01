@@ -461,23 +461,71 @@ export default function Recommandations() {
     }
   };
 
-  const handlePrint = (orientation: 'portrait' | 'landscape') => {
-    const rows = filteredRecommandations.map((rec, idx) => `
-    <tr>
-      <td>${idx + 1}</td>
-      <td>${rec.NumeroRecommandation || rec.RecommandationID}</td>
-      <td>${rec.TexteRecommandation.substring(0, 80)}...</td>
-      <td>${rec.NumeroRapport || '-'}</td>
-      <td>${rec.ResponsableMiseEnOeuvre || '-'}</td>
-      <td>${rec.Echeance || '-'}</td>
-      <td>${rec.NiveauMiseEnOeuvre || 'Non commencé'}</td>
-    </tr>
-    `).join('');
-    const content = `<table style="width:100%; border-collapse: collapse;">
-      <thead><tr style="background:#1b365d;color:white;"><th>N°</th><th>Numéro</th><th>Recommandation</th><th>Rapport</th><th>Responsable</th><th>Échéance</th><th>Statut</th></tr></thead>
-      <tbody>${rows}</tbody></table>`;
-    printDocument(content, 'LISTE DES RECOMMANDATIONS', orientation);
-  };
+const handlePrint = (orientation: 'portrait' | 'landscape') => {
+    // Préparer les colonnes du tableau
+    const columns = ['N°', 'Numéro', 'Recommandation', 'Rapport', 'Responsable', 'Échéance', 'Statut'];
+    
+    // Préparer les lignes du tableau
+    const rows = filteredRecommandations.map((rec, idx) => [
+        (idx + 1).toString(),
+        rec.NumeroRecommandation || rec.RecommandationID.toString(),
+        rec.TexteRecommandation.length > 100 ? rec.TexteRecommandation.substring(0, 100) + '...' : rec.TexteRecommandation,
+        rec.NumeroRapport || '-',
+        rec.ResponsableMiseEnOeuvre || '-',
+        rec.Echeance || '-',
+        rec.NiveauMiseEnOeuvre || 'Non commencé'
+    ]);
+
+    // Générer le HTML du tableau
+    const tableHtml = `
+        <table style="width:100%; border-collapse: collapse; margin-top: 20px;">
+            <thead>
+                <tr style="background-color: #f3f4f6; border: 1px solid #e5e7eb;">
+                    ${columns.map(col => `<th style="border: 1px solid #e5e7eb; padding: 10px; font-weight: bold; text-align: left;">${col}</th>`).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.map(row => `
+                    <tr style="border: 1px solid #e5e7eb;">
+                        ${row.map(cell => `<td style="border: 1px solid #e5e7eb; padding: 8px;">${cell}</td>`).join('')}
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        <div style="margin-top: 10px; text-align: right;">
+            Taux de réalisation : ${getTauxRealisation().toFixed(1)}%
+        </div>
+    `;
+
+    // Sélectionner un signataire (vous pouvez le rendre dynamique avec un état)
+    const signataire = {
+        Nom: 'GUIGMA',
+        Prenom: 'Windongoudi Hamadou',
+        Grade: 'Inspecteur Général de Police',
+        Fonction: "L'Inspecteur Général des Services",
+        TitreHonorifique: 'Officier de l\'Ordre de l\'Étalon'
+    };
+
+    // Destinataire
+    const destinataire = {
+        Nom: 'Monsieur le Ministre de la Sécurité',
+        Fonction: '' // La fonction ne s'affiche pas si vide
+    };
+
+    // Utiliser le hook usePrint avec toutes les options
+    printDocument(
+        tableHtml,
+        'Liste des recommandations',
+        orientation,
+        true, // showHeader
+        signataire,
+        destinataire,
+        {
+            numeroReference: 'N°{YEAR}/M/SECU/CAB/ITS/CONF/REC',
+            effectif: filteredRecommandations.length
+        }
+    );
+};
 
   const filteredRecommandations = recommandations.filter(rec => {
     const matchesSearch = rec.TexteRecommandation.toLowerCase().includes(searchTerm.toLowerCase()) ||

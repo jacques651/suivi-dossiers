@@ -1,15 +1,14 @@
+// src/App.tsx
 import { useState, useEffect } from 'react';
-import { MantineProvider, AppShell, Box, Text, Burger, Group, LoadingOverlay, Image } from '@mantine/core';
+import { MantineProvider, AppShell, Box, Text, Burger, Group, LoadingOverlay, Image, Tooltip } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { theme } from './theme';
 import { invoke } from '@tauri-apps/api/core';
 import LoginPage from './components/LoginPage';
+import Navbar from './components/Navbar';
+import LogsManager from './components/referentiels/LogsManager';
 
 import SuiviRecommandationsManager from './pages/SuiviRecommandationsManager';
-import { 
-  IconDashboard, IconReport, IconUsers, IconFileText, IconListCheck,
-  IconLogout, IconDatabase, IconChecklist
-} from '@tabler/icons-react';
 import Dashboard from './pages/Dashboard';
 import AgentManager from './pages/agents/AgentManager';
 import Rapports from './pages/Rapports';
@@ -24,7 +23,10 @@ import '@mantine/notifications/styles.css';
 interface LoginResponse {
   success: boolean;
   token?: string;
-  user?: { nom_utilisateur: string };
+  user?: { 
+    nom_utilisateur: string;
+    role?: string;
+  };
   message?: string;
 }
 
@@ -35,6 +37,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
+  const [userRole, setUserRole] = useState('user');
 
   useEffect(() => {
     checkAuth();
@@ -47,7 +50,8 @@ function App() {
         const result = await invoke<any>('verify_session', { token });
         if (result) {
           setIsAuthenticated(true);
-          setUserName('Administrateur');
+          setUserName(result.nom_utilisateur || 'Administrateur');
+          setUserRole(result.role || 'admin');
         } else {
           localStorage.removeItem('auth_token');
         }
@@ -65,6 +69,7 @@ function App() {
         localStorage.setItem('auth_token', result.token);
         setIsAuthenticated(true);
         setUserName(result.user?.nom_utilisateur || 'Utilisateur');
+        setUserRole(result.user?.role || 'user');
         return true;
       }
       return false;
@@ -86,17 +91,8 @@ function App() {
     localStorage.removeItem('auth_token');
     setIsAuthenticated(false);
     setUserName('');
+    setUserRole('user');
   };
-
-  const menuItems = [
-    { id: 'dashboard', label: 'Tableau de Bord', icon: IconDashboard },
-    { id: 'agents', label: 'Agents', icon: IconUsers },
-    { id: 'rapports', label: 'Rapports', icon: IconReport },
-    { id: 'dossiers', label: 'Dossiers', icon: IconFileText },
-    { id: 'recommandations', label: 'Recommandations', icon: IconListCheck },
-    { id: 'suiviRecommandations', label: 'Suivi Recommandations', icon: IconChecklist },
-    { id: 'referentiels', label: 'Référentiels', icon: IconDatabase },
-  ];
 
   const renderContent = () => {
     switch(activeTab) {
@@ -107,6 +103,7 @@ function App() {
       case 'recommandations': return <Recommandations />;
       case 'suiviRecommandations': return <SuiviRecommandationsManager />;
       case 'referentiels': return <Referentiels />;
+      case 'logs': return <LogsManager />;
       default: return <Dashboard onNavigate={(page) => setActiveTab(page)} />;
     }
   };
@@ -134,9 +131,9 @@ function App() {
       <AppShell
         header={{ height: 60 }}
         navbar={{
-          width: 280,
+          width: desktopOpened ? 280 : 70,
           breakpoint: 'sm',
-          collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
+          collapsed: { mobile: !mobileOpened, desktop: false },
         }}
         padding="md"
       >
@@ -148,14 +145,15 @@ function App() {
                 onClick={() => setMobileOpened(!mobileOpened)} 
                 hiddenFrom="sm" 
                 size="sm" 
+                color="white"
               />
               <Burger 
                 opened={desktopOpened} 
                 onClick={() => setDesktopOpened(!desktopOpened)} 
                 visibleFrom="sm" 
                 size="sm" 
+                color="white"
               />
-              {/* Logo des armoiries du Burkina Faso */}
               <Image 
                 src="/armoirie.jpeg" 
                 alt="Armoiries du Burkina Faso"
@@ -164,87 +162,52 @@ function App() {
                 fit="contain"
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
-              <Box>
+              <Box visibleFrom="sm">
                 <Text size="xl" fw={700} c="white">Suivi Dossiers</Text>
-                <Text size="xs" c="gray.3" visibleFrom="sm">| Suivi des Inspections et Dossiers Disciplinaires</Text>
+                <Text size="xs" c="gray.3">Suivi des Inspections et Dossiers Disciplinaires</Text>
+              </Box>
+              <Box hiddenFrom="sm">
+                <Text size="md" fw={700} c="white">Suivi Dossiers</Text>
               </Box>
             </Group>
             
             <Group gap="md">
-              <Text c="white" size="sm">Bienvenue, {userName}</Text>
-              <Box 
-                onClick={handleLogout} 
-                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-              >
-                <IconLogout size={20} color="white" />
-              </Box>
+              <Tooltip label={userName} position="bottom" withArrow>
+                <Box
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text size="sm" fw={600} c="white">
+                    {userName.charAt(0).toUpperCase()}
+                  </Text>
+                </Box>
+              </Tooltip>
             </Group>
           </Group>
         </AppShell.Header>
 
-        <AppShell.Navbar p="md">
-          {menuItems.map((item) => (
-            <Box
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id);
-                setMobileOpened(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: 12,
-                borderRadius: 8,
-                cursor: 'pointer',
-                backgroundColor: activeTab === item.id ? 'rgba(255,255,255,0.15)' : 'transparent',
-                marginBottom: 4,
-                color: 'white',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                if (activeTab !== item.id) {
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== item.id) {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }
-              }}
-            >
-              <item.icon size={22} stroke={1.5} />
-              <Text size="md" fw={500}>{item.label}</Text>
-            </Box>
-          ))}
-          
-          <Box mt="auto" pt="xl">
-            <Box
-              onClick={handleLogout}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: 12,
-                borderRadius: 8,
-                cursor: 'pointer',
-                color: '#ff6b6b',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255,107,107,0.1)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >
-              <IconLogout size={22} stroke={1.5} />
-              <Text size="md" fw={500}>Déconnexion</Text>
-            </Box>
-          </Box>
+        <AppShell.Navbar style={{ backgroundColor: '#1b365d' }}>
+          <Navbar
+            activeTab={activeTab}
+            onTabChange={(tabId) => {
+              setActiveTab(tabId);
+              setMobileOpened(false);
+            }}
+            onLogout={handleLogout}
+            userName={userName}
+            userRole={userRole}
+            collapsed={!desktopOpened}
+          />
         </AppShell.Navbar>
 
-        <AppShell.Main>
+        <AppShell.Main style={{ backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
           {renderContent()}
         </AppShell.Main>
       </AppShell>

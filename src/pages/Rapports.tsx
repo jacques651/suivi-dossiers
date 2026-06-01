@@ -53,6 +53,9 @@ export default function Rapports() {
   const [activePage, setActivePage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [infoModalOpen, setInfoModalOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [customObject, setCustomObject] = useState('');
   const itemsPerPage = 10;
   const { printDocument } = usePrint();
 
@@ -221,6 +224,86 @@ export default function Rapports() {
     }
   };
 
+  // Ouvrir le modal d'impression avec objet personnalisé
+  const openPrintModal = (orientation: 'portrait' | 'landscape') => {
+    setPrintOrientation(orientation);
+    setCustomObject(''); // Réinitialiser l'objet personnalisé
+    setPrintModalOpen(true);
+  };
+
+  // Gestion de l'impression avec objet personnalisé
+  const handlePrintWithCustomObject = () => {
+    // Nettoyer le texte des balises HTML
+    const cleanText = (text: string | undefined): string => {
+      if (!text) return '-';
+      let cleaned = text.replace(/<[^>]*>/g, '');
+      cleaned = cleaned.replace(/&nbsp;/g, ' ');
+      return cleaned;
+    };
+
+    const columns = ['N°', 'N° Rapport', 'Libellé', 'Date', "Type d'inspection", 'Période sous revue'];
+    const rows = filteredRapports.map((rapport, idx) => [
+      (idx + 1).toString(),
+      rapport.NumeroRapport || '-',
+      cleanText(rapport.LibelleRapport),
+      dayjs(rapport.DateRapport).format('DD/MM/YYYY'),
+      rapport.TypeInspection || '-',
+      rapport.PeriodeSousRevue || '-'
+    ]);
+
+    // Utiliser l'objet personnalisé s'il est fourni, sinon utiliser le texte par défaut
+    const objetText = customObject.trim() || "LISTE DES RAPPORTS D'INSPECTION";
+
+    const tableHtml = `
+      <div style="margin: 20px 0; font-weight: bold; font-size: 14px;">OBJET : ${objetText}</div>
+      <table style="width:100%; border-collapse: collapse; margin-top: 20px;">
+        <thead>
+          <tr style="background-color: #1b365d; color: white;">
+            ${columns.map(col => `<th style="border: 1px solid #2a4a7a; padding: 10px; text-align: center;">${col}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr style="border: 1px solid #ddd;">
+              ${row.map((cell, idx) => {
+                const style = idx === 2 ? 'style="text-align: left; padding: 8px;"' : 'style="text-align: center; padding: 8px;"';
+                return `<td ${style}>${cell || '-'}</td>`;
+              }).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // Définir le signataire
+    const signataire = {
+      Nom: 'GUIGMA',
+      Prenom: 'Windongoudi Hamadou',
+      Grade: 'Inspecteur Général de Police',
+      Fonction: "L'Inspecteur Général des Services",
+      TitreHonorifique: 'Officier de l\'Ordre de l\'Étalon'
+    };
+
+    // Définir le destinataire
+    const destinataire = {
+      Nom: 'Monsieur le Ministre de la Sécurité',
+      Fonction: ''
+    };
+
+    // Appeler printDocument avec showHeader = true pour afficher l'en-tête complet
+    printDocument(
+      tableHtml,
+      objetText, // Utiliser l'objet personnalisé comme titre
+      printOrientation,
+      true,  // showHeader = true
+      signataire,
+      destinataire,
+      { effectif: filteredRapports.length }
+    );
+
+    setPrintModalOpen(false);
+  };
+
   // Export EXCEL
   const exportToExcel = async () => {
     try {
@@ -330,7 +413,7 @@ export default function Rapports() {
       if (!filePath) { setExporting(false); return; }
 
       const rows = filteredRapports.map((rapport, idx) => `
-        <td>
+        <tr>
           <td style="border:1px solid #ddd;padding:8px;text-align:center">${idx + 1}</td>
           <td style="border:1px solid #ddd;padding:8px">${rapport.NumeroRapport}</td>
           <td style="border:1px solid #ddd;padding:8px"><strong>${rapport.LibelleRapport}</strong></td>
@@ -379,38 +462,6 @@ export default function Rapports() {
     }
   };
 
-  // Impression
-  const handlePrint = (orientation: 'portrait' | 'landscape') => {
-    const rows = filteredRapports.map((rapport, idx) => `
-      <tr>
-        <td>${idx + 1}</td>
-        <td>${rapport.NumeroRapport}</td>
-        <td>${rapport.LibelleRapport}</td>
-        <td>${dayjs(rapport.DateRapport).format('DD/MM/YYYY')}</td>
-        <td>${rapport.TypeInspection || '-'}</td>
-        <td>${rapport.PeriodeSousRevue || '-'}</td>
-      </tr>
-    `).join('');
-
-    const content = `
-      <table style="width:100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #1b365d; color: white;">
-            <th style="padding: 10px; border: 1px solid #ddd;">N°</th>
-            <th style="padding: 10px; border: 1px solid #ddd;">Numéro</th>
-            <th style="padding: 10px; border: 1px solid #ddd;">Libellé</th>
-            <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
-            <th style="padding: 10px; border: 1px solid #ddd;">Type</th>
-            <th style="padding: 10px; border: 1px solid #ddd;">Période</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-       </table>
-    `;
-
-    printDocument(content, 'LISTE DES RAPPORTS D\'INSPECTION', orientation);
-  };
-
   // Filtrage des rapports
   const filteredRapports = rapports.filter(rapport =>
     rapport.NumeroRapport?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -450,7 +501,7 @@ export default function Rapports() {
       <Container size="full" fluid>
         <Stack gap="xl">
           {/* En-tête avec PageHeader */}
-          <PageHeader title="Bienvenue dans la page de Gestion des Rapports d'Inspection" />
+          <PageHeader title="Gestion des Rapports d'Inspection" />
 
           {/* Statistiques */}
           <Transition mounted={true} transition="slide-down" duration={500} timingFunction="ease">
@@ -550,8 +601,8 @@ export default function Rapports() {
                         </Button>
                       </Menu.Target>
                       <Menu.Dropdown>
-                        <Menu.Item onClick={() => handlePrint('portrait')}>Portrait</Menu.Item>
-                        <Menu.Item onClick={() => handlePrint('landscape')}>Paysage</Menu.Item>
+                        <Menu.Item onClick={() => openPrintModal('portrait')}>Portrait</Menu.Item>
+                        <Menu.Item onClick={() => openPrintModal('landscape')}>Paysage</Menu.Item>
                       </Menu.Dropdown>
                     </Menu>
 
@@ -937,6 +988,68 @@ export default function Rapports() {
         </Stack>
       </Modal>
 
+      {/* Modal Impression avec objet personnalisé */}
+      <Modal
+        opened={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title={
+          <Group gap="sm">
+            <IconPrinter size={20} color="white" />
+            <Text fw={700} size="lg" c="white">Paramètres d'impression</Text>
+          </Group>
+        }
+        size="md"
+        centered
+        overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
+        transitionProps={{ transition: 'fade', duration: 200 }}
+        styles={{
+          header: { background: 'linear-gradient(135deg, #1b365d 0%, #295080 100%)', padding: '1.5rem' },
+          close: { color: 'white', '&:hover': { background: 'rgba(255,255,255,0.2)', transform: 'rotate(90deg)' } }
+        }}
+      >
+        <form onSubmit={(e) => { e.preventDefault(); handlePrintWithCustomObject(); }}>
+          <Stack gap="md">
+            <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light" radius="md">
+              <Text size="sm" fw={500}>Définissez l'objet du document à imprimer</Text>
+            </Alert>
+            
+            <Textarea
+              label="Objet du document"
+              description="Personnalisez l'objet qui apparaîtra sur le document imprimé"
+              placeholder="Ex: RAPPORT D'INSPECTION TECHNIQUE - 1ER TRIMESTRE 2025"
+              value={customObject}
+              onChange={(e) => setCustomObject(e.currentTarget.value)}
+              minRows={3}
+              maxRows={5}
+              size="md"
+              radius="md"
+              autosize
+            />
+            
+            <Text size="xs" c="dimmed">
+              Si vous laissez vide, l'objet par défaut "LISTE DES RAPPORTS D'INSPECTION" sera utilisé.
+            </Text>
+            
+            <Divider />
+            
+            <Group justify="space-between" mt="md">
+              <Button variant="light" onClick={() => setPrintModalOpen(false)} radius="md">
+                Annuler
+              </Button>
+              <Button 
+                type="submit"
+                variant="gradient" 
+                gradient={{ from: '#1b365d', to: '#295080' }} 
+                leftSection={<IconPrinter size={18} />}
+                radius="md"
+              >
+                Imprimer
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+
       {/* Modal Instructions */}
       <Modal
         opened={infoModalOpen}
@@ -967,7 +1080,7 @@ export default function Rapports() {
               <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">3</ThemeIcon><Text size="sm">Décrivez la période sous revue pour plus de précision</Text></Group>
               <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">4</ThemeIcon><Text size="sm">Exportez la liste au format Excel, PDF ou Word</Text></Group>
               <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">5</ThemeIcon><Text size="sm">Utilisez la recherche pour filtrer rapidement les rapports</Text></Group>
-              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">6</ThemeIcon><Text size="sm">Imprimez la liste en format portrait ou paysage</Text></Group>
+              <Group gap="sm"><ThemeIcon size="xs" radius="xl" color="blue" variant="light">6</ThemeIcon><Text size="sm">Personnalisez l'objet avant impression</Text></Group>
             </Stack>
           </Paper>
           <Divider />

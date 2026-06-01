@@ -1,3 +1,4 @@
+// src/pages/Referentiels.tsx
 import { useEffect, useState } from 'react';
 import {
   Tabs, Card, Group, Text, Badge, 
@@ -24,11 +25,12 @@ import { SanctionsTab } from '../components/referentiels/SanctionsTab';
 import { SignatairesTab } from '../components/referentiels/SignatairesTab';
 import { ServicesTab } from '../components/referentiels/ServicesTab';
 import { ParametresTab } from '../components/referentiels/ParametresTab';
-import { EntetesTab } from '../components/referentiels/EntetesTab';
-import { LogsTab } from '../components/referentiels/LogsTab';
+
 
 // Types
 import { Grade, Sanction, Signataire, ServiceInvestigation, ParametreGeneral, EnteteDocument, Log } from '../components/referentiels/types';
+import { EntetesTab } from '../components/referentiels/EntetesTab';
+import LogsManager from '../components/referentiels/LogsManager';
 
 export default function Referentiels() {
   const [activeTab, setActiveTab] = useState<string | null>('grades');
@@ -41,7 +43,7 @@ export default function Referentiels() {
   const [services, setServices] = useState<ServiceInvestigation[]>([]);
   const [parametres, setParametres] = useState<ParametreGeneral[]>([]);
   const [enteteDocuments, setEnteteDocuments] = useState<EnteteDocument[]>([]);
-  const [logs, setLogs] = useState<Log[]>([]);
+  const [] = useState<Log[]>([]);
 
   // Chargement initial
   useEffect(() => {
@@ -52,7 +54,6 @@ export default function Referentiels() {
   useEffect(() => {
     if (activeTab === 'parametres') loadParametres();
     if (activeTab === 'entete') loadEnteteDocuments();
-    if (activeTab === 'logs') loadLogs();
   }, [activeTab]);
 
   const loadEssentialData = async () => {
@@ -121,22 +122,11 @@ export default function Referentiels() {
     }
   };
 
-  const loadLogs = async () => {
-    try {
-      const result = await invoke('get_logs_with_users', { limit: 200 });
-      setLogs(result as Log[]);
-    } catch (error) {
-      console.warn('Impossible de charger l\'historique:', error);
-      setLogs([]);
-    }
-  };
-
   const loadAllData = async () => {
     setLoading(true);
     await loadEssentialData();
     await loadParametres();
     await loadEnteteDocuments();
-    await loadLogs();
     setLoading(false);
   };
 
@@ -153,25 +143,21 @@ export default function Referentiels() {
     );
   }
 
-
-
   return (
     <Box p="md">
       <Container size="full">
         <Stack gap="lg">
-          {/* Header avec PageHeader - sans rightContent */}
+          {/* Header avec PageHeader */}
           <PageHeader 
-            title="Bienvenue dans la page de Configuration des Référentiels"
-          
+            title="Configuration des Référentiels"
           />
 
-          {/* Carte avec onglets - Version sans barre d'actions séparée */}
+          {/* Carte avec onglets */}
           <Card withBorder radius="md" shadow="none" p={0}>
             <Tabs value={activeTab} onChange={setActiveTab} variant="pills" radius="md">
-              {/* En-tête des onglets avec version et bouton actualiser */}
+              {/* En-tête des onglets */}
               <div style={{ borderBottom: '1px solid #e9ecef', backgroundColor: '#f8f9fa' }}>
                 <Group justify="space-between" align="center" wrap="wrap" p="xs">
-                  {/* Onglets */}
                   <Tabs.List grow style={{ flex: 1 }}>
                     <Tabs.Tab value="grades" leftSection={<IconUserStar size={16} />}>Grades</Tabs.Tab>
                     <Tabs.Tab value="sanctions" leftSection={<IconGavel size={16} />}>Sanctions</Tabs.Tab>
@@ -182,7 +168,7 @@ export default function Referentiels() {
                     <Tabs.Tab value="logs" leftSection={<IconHistory size={16} />}>Historique</Tabs.Tab>
                   </Tabs.List>
 
-                  {/* Version et Bouton Actualiser à droite */}
+                  {/* Version et Bouton Actualiser */}
                   <Group gap="xs" ml="auto">
                     <Badge size="md" variant="light" color="dark" style={{ backgroundColor: '#e9ecef' }}>
                       v2.0
@@ -197,12 +183,6 @@ export default function Referentiels() {
                       style={{
                         backgroundColor: 'rgba(27, 54, 93, 0.1)',
                         transition: 'all 0.3s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(27, 54, 93, 0.2)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(27, 54, 93, 0.1)';
                       }}
                     >
                       Actualiser
@@ -237,7 +217,7 @@ export default function Referentiels() {
               </Tabs.Panel>
 
               <Tabs.Panel value="logs" p="xs">
-                <LogsTab logs={logs} onRefresh={loadLogs} />
+                <LogsManager />
               </Tabs.Panel>
             </Tabs>
           </Card>
